@@ -760,6 +760,24 @@ fn t_density_is_stable_for_large_degrees() {
     close_tol(ev("T.DIST", vec![n(1.0), n(10_000_000_000_000_000.0), b(false)]), 0.24197072451914337, 1e-12);
 }
 
+/// #4023: T.INV.2T and T.INV keep their precision where the quantile is near 0. One and two
+/// degrees of freedom have closed forms: tan(pi (1 - p) / 2) and sqrt(2) (1 - p) / sqrt(p (2 - p)).
+#[test]
+fn t_inverses_keep_precision_near_the_centre() {
+    for p in [0.51_f64, 0.6, 0.9, 0.99, 1.0 - 1e-9, 0.999_999_999_999, 0.999_999_999_999_999] {
+        let two = std::f64::consts::SQRT_2 * (1.0 - p) / (p * (2.0 - p)).sqrt();
+        assert!(rel_err(ev("T.INV.2T", vec![n(p), n(2.0)]), two) < 1e-13, "T.INV.2T({p}, 2)");
+        assert!(rel_err(ev("T.INV.2T", vec![n(p), n(1.0)]), (std::f64::consts::FRAC_PI_2 * (1.0 - p)).tan()) < 1e-13, "T.INV.2T({p}, 1)");
+        // T.INV at the matching one-tailed probability q is the same quantile. q rounds to a
+        // double near 0.5, so the closed form is taken at the two-tailed probability q stands for,
+        // 2 (1 − q), which is exact.
+        let q = 1.0 - p / 2.0;
+        let p_q = 2.0 * (1.0 - q);
+        let two_q = std::f64::consts::SQRT_2 * (1.0 - p_q) / (p_q * (2.0 - p_q)).sqrt();
+        assert!(rel_err(ev("T.INV", vec![n(q), n(2.0)]), two_q) < 1e-13, "T.INV at {p}");
+    }
+}
+
 #[test]
 fn t_inv_zero_probability_returns_div0() {
     is_err(ev("T.INV", vec![n(-0.1), n(1.0)]), CellError::Num);
