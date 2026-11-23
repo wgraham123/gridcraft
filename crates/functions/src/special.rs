@@ -155,7 +155,7 @@ pub(crate) fn reg_gamma_q_front(a: f64, x: f64, front: f64) -> f64 {
 /// `e^-x x^a / Γ(a)`. For a ≥ 10 the large terms of −x + a ln x − ln Γ(a) are cancelled exactly
 /// through Stirling's series: a (ln(1 + d) − d) + ½ ln(a / 2π) − δ(a), with d = (x − a) / a, so
 /// CHISQ, GAMMA and POISSON keep their digits at large degrees of freedom or means.
-fn front_of(a: f64, x: f64) -> f64 {
+pub(crate) fn front_of(a: f64, x: f64) -> f64 {
     if a >= 10.0 && a.is_finite() {
         let d = (x - a) / a;
         return (a * ln_1p_minus(d) + 0.5 * (a / (2.0 * PI)).ln() - stirling_remainder(a)).exp();

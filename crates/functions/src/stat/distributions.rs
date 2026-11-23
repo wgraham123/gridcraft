@@ -1,7 +1,7 @@
 use super::descriptive::{arg_nums, arg_pairs, mean, var_s};
 use super::{
-    Arg, C, CellError, R, Value, arg, as_array, boolean, erf, gamma, has, invert, ln_beta, ln_gamma, norm_cdf, norm_inv, norm_pdf, num, num_val,
-    reg_gamma_p, reg_gamma_q, reg_gamma_q_front, reg_inc_beta, reg_inc_beta_complement, reg_inc_beta_front,
+    Arg, C, CellError, R, Value, arg, as_array, boolean, erf, front_of, gamma, has, invert, ln_beta, ln_gamma, norm_cdf, norm_inv, norm_pdf, num,
+    num_val, reg_gamma_p, reg_gamma_q, reg_gamma_q_front, reg_inc_beta, reg_inc_beta_complement, reg_inc_beta_front,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -91,7 +91,7 @@ fn f_pdf(x: f64, d1: f64, d2: f64) -> f64 {
             0.0
         };
     }
-    ((d1 / 2.0) * (d1 / d2).ln() + (d1 / 2.0 - 1.0) * x.ln() - ((d1 + d2) / 2.0) * (1.0 + d1 * x / d2).ln() - ln_beta(d1 / 2.0, d2 / 2.0)).exp()
+    ((d1 / 2.0) * (d1 / d2).ln() + (d1 / 2.0 - 1.0) * x.ln() - ((d1 + d2) / 2.0) * (d1 * x / d2).ln_1p() - ln_beta(d1 / 2.0, d2 / 2.0)).exp()
 }
 
 const MAX_BINOM_TRIALS: f64 = 2_147_483_646.0;
@@ -482,7 +482,9 @@ pub(super) fn chisq_dist(a: &[Arg], _: C) -> R<Value> {
             num_val(0.0)
         };
     }
-    num_val(((v / 2.0 - 1.0) * x.ln() - x / 2.0 - (v / 2.0) * 2f64.ln() - ln_gamma(v / 2.0)).exp())
+    // x^(v/2-1) e^(-x/2) / (2^(v/2) Γ(v/2)) = front_of(v/2, x/2) / x, whose large terms cancel
+    // exactly at many degrees of freedom.
+    num_val(front_of(v / 2.0, x / 2.0) / x)
 }
 
 pub(super) fn chisq_dist_rt(a: &[Arg], _: C) -> R<Value> {
@@ -699,7 +701,8 @@ pub(super) fn gamma_dist(a: &[Arg], _: C) -> R<Value> {
     if x == 0.0 {
         return if al <= 1.0 { Err(CellError::Num) } else { num_val(0.0) };
     }
-    num_val(((al - 1.0) * x.ln() - x / be - al * be.ln() - ln_gamma(al)).exp())
+    // x^(α-1) e^(-x/β) / (β^α Γ(α)) = front_of(α, x/β) / x, exact for a large shape too.
+    num_val(front_of(al, x / be) / x)
 }
 
 pub(super) fn gamma_inv(a: &[Arg], _: C) -> R<Value> {
@@ -747,7 +750,7 @@ pub(super) fn beta_dist(a: &[Arg], _: C) -> R<Value> {
         let base = if z == 0.0 { al } else { be };
         if base == 1.0 { -ln_beta(al, be) } else { f64::NEG_INFINITY }
     } else {
-        (al - 1.0) * z.ln() + (be - 1.0) * (1.0 - z).ln() - ln_beta(al, be)
+        (al - 1.0) * z.ln() + (be - 1.0) * (-z).ln_1p() - ln_beta(al, be)
     };
     num_val(lp.exp() / (hi - lo))
 }
