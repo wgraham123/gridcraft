@@ -542,18 +542,19 @@ impl Dialog {
             ),
             "comment" => {
                 let threaded = p("threaded").as_bool().unwrap_or(true);
-                let existing = app
-                    .session
-                    .active()
-                    .and_then(|d| d.wb.active().and_then(|s| s.comments.get(&d.selection.active).map(|c| c.text.clone())))
-                    .unwrap_or_default();
-                Dialog::form(
+                let existing = app.session.active().and_then(|d| d.wb.active().and_then(|s| s.comments.get(&d.selection.active).cloned()));
+                let mut d = Dialog::form(
                     if threaded { "comment" } else { "note" },
                     if threaded { "New Comment" } else { "New Note" },
                     if threaded { "review.newComment" } else { "review.newNote" },
                     vec![Text { key: "text", label: if threaded { "Start a conversation:" } else { "Note:" } }],
-                    json!({"text": existing}),
-                )
+                    json!({"text": existing.as_ref().map(|c| c.text.as_str()).unwrap_or_default()}),
+                );
+                // As in Excel, the note dialog on a cell with a note edits that note (#3693).
+                if !threaded && existing.is_some_and(|c| !c.threaded) {
+                    d.title = "Edit Note".into();
+                }
+                d
             }
             // Asks before a web or e-mail link leaves the workbook. OK opens it through
             // `Session::open_confirmed_link` (which refuses anything but http, https and mailto),

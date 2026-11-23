@@ -157,6 +157,12 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
             if let Some(item) = insert_copied {
                 items.insert(6, item);
             }
+            // On a cell with a note Excel offers to edit it; the dialog opens with its text (#3693).
+            let has_note =
+                app.session.active().is_some_and(|d| d.wb.active().and_then(|sh| sh.comments.get(&d.selection.active)).is_some_and(|c| !c.threaded));
+            if has_note && let Some(item) = items.iter_mut().find(|(_, id)| *id == "ui:newNote") {
+                item.0 = "Edit Note";
+            }
             if link.is_some()
                 && let Some(i) = items.iter().position(|(_, id)| *id == "ui:insertLink")
             {
