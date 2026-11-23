@@ -60,36 +60,6 @@ fn map_visibility(visibility: craft_xlsx::Visibility) -> Visibility {
     }
 }
 
-pub(super) fn import_limits() -> craft_xlsx::Limits {
-    let limits = craft_xlsx::Limits::default();
-    // Keep the lower decoded-text budget in the browser's WebAssembly heap.
-    if cfg!(target_arch = "wasm32") { craft_xlsx::Limits { binary_text: 64 << 20, ..limits } } else { limits }
-}
-
-fn map_formula(f: &craft_xlsx::CellFormula, at: craft_xlsx::CellRef, report: &mut ReadReport) -> Option<Formula> {
-    let text = crate::fmla::from_file(f.text.trim());
-    if text.is_empty() {
-        return None;
-    }
-    match f.kind {
-        craft_xlsx::FormulaKind::Normal | craft_xlsx::FormulaKind::Shared => Some(Formula::new(&text)),
-        craft_xlsx::FormulaKind::Array => {
-            let pos = CellRef::new(at.row, at.col);
-            let mut fm = Formula::new(&text);
-            fm.array = Some(
-                f.range
-                    .map(|r| RangeRef::new(CellRef::new(r.first.row, r.first.col), CellRef::new(r.last.row, r.last.col)))
-                    .unwrap_or_else(|| RangeRef::cell(pos)),
-            );
-            Some(fm)
-        }
-        craft_xlsx::FormulaKind::DataTable => {
-            report.warn("what-if data tables are not supported; kept their values");
-            None
-        }
-    }
-}
-
 /// The array formulas' ranges of the sheet being read. The file keeps the saved results of an
 /// array formula's other cells as plain values; as in an `.xlsx`, they are left empty for the
 /// formula to fill again, or they would block it with `#SPILL!` (#4669). An array's first cell is
@@ -119,6 +89,36 @@ impl ArrayRanges {
         }
         self.checks = self.checks.saturating_add(self.ranges.len() as u64);
         self.ranges.iter().any(|r| r.contains(at) && r.start != at)
+    }
+}
+
+pub(super) fn import_limits() -> craft_xlsx::Limits {
+    let limits = craft_xlsx::Limits::default();
+    // Keep the lower decoded-text budget in the browser's WebAssembly heap.
+    if cfg!(target_arch = "wasm32") { craft_xlsx::Limits { binary_text: 64 << 20, ..limits } } else { limits }
+}
+
+fn map_formula(f: &craft_xlsx::CellFormula, at: craft_xlsx::CellRef, report: &mut ReadReport) -> Option<Formula> {
+    let text = crate::fmla::from_file(f.text.trim());
+    if text.is_empty() {
+        return None;
+    }
+    match f.kind {
+        craft_xlsx::FormulaKind::Normal | craft_xlsx::FormulaKind::Shared => Some(Formula::new(&text)),
+        craft_xlsx::FormulaKind::Array => {
+            let pos = CellRef::new(at.row, at.col);
+            let mut fm = Formula::new(&text);
+            fm.array = Some(
+                f.range
+                    .map(|r| RangeRef::new(CellRef::new(r.first.row, r.first.col), CellRef::new(r.last.row, r.last.col)))
+                    .unwrap_or_else(|| RangeRef::cell(pos)),
+            );
+            Some(fm)
+        }
+        craft_xlsx::FormulaKind::DataTable => {
+            report.warn("what-if data tables are not supported; kept their values");
+            None
+        }
     }
 }
 
