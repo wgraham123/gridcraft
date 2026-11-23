@@ -1,4 +1,4 @@
-use super::{Arg, C, CellError, R, Value, arg, array_numbers, array_val, as_array, has, num, num_val, opt_num};
+use super::{Arg, C, CellError, R, Value, arg, array_numbers, array_val, as_array, has, num, num_val, numbers, opt_num};
 
 // ---------------------------------------------------------------------------------------------
 // Basic helpers over number lists
@@ -384,12 +384,18 @@ pub(super) fn rank_impl(a: &[Arg], avg: bool) -> R<Value> {
     num_val(if avg { r + (eq as f64 - 1.0) / 2.0 } else { r })
 }
 
+/// PERCENTRANK, PERCENTRANK.INC and PERCENTRANK.EXC. The data set takes only numbers from a
+/// reference (a cell holding text, a boolean or nothing adds no sample, as in Excel), and a data
+/// set without numbers is `#N/A`: no value has a rank in it.
 pub(super) fn percentrank_impl(a: &[Arg], exc: bool) -> R<Value> {
-    let s = sorted(arg_nums(a, 0)?);
+    let s = sorted(numbers(std::slice::from_ref(arg(a, 0)?))?);
     let x = num(a, 1)?;
     let sig = opt_num(a, 2, 3.0)?.trunc();
-    if sig < 1.0 || s.is_empty() {
+    if sig < 1.0 {
         return Err(CellError::Num);
+    }
+    if s.is_empty() {
+        return Err(CellError::NA);
     }
     // Excel: 10^significance overflows from 309 up.
     if sig >= 309.0 {

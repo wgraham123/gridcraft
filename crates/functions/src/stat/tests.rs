@@ -364,6 +364,26 @@ fn percentiles() {
     close(ev("PERCENTRANK.EXC", vec![k, n(2.123_456_789), n(16.0)]), 0.265_432_098_625);
 }
 
+/// A referenced data set counts only its numbers: a cell holding numeric text, other text, a
+/// boolean or nothing is no sample, and a set left without numbers is #N/A (#4041). Typed
+/// values still coerce, and an error in the data still propagates.
+#[test]
+fn percentrank_takes_only_numbers_from_a_reference() {
+    for name in ["PERCENTRANK", "PERCENTRANK.INC", "PERCENTRANK.EXC"] {
+        for cell in [tv("2"), tv(""), tv("x"), Value::Empty, Value::Bool(true)] {
+            is_err(ev(name, vec![rf(cell), n(2.0)]), CellError::NA);
+        }
+        let no_numbers = arr(vec![vec![tv("2")], vec![Value::Bool(true)], vec![Value::Bool(false)], vec![tv("")]]);
+        is_err(ev(name, vec![rf(no_numbers), n(2.0)]), CellError::NA);
+        // The numbers among other cells still rank, as with a range of numbers only.
+        let mixed = arr(vec![vec![nv(1.0)], vec![tv("9")], vec![nv(2.0)], vec![Value::Empty], vec![nv(3.0)]]);
+        assert_eq!(ev(name, vec![rf(mixed), n(2.0)]), ev(name, vec![c(&[1.0, 2.0, 3.0]), n(2.0)]));
+        is_err(ev(name, vec![rf(Value::Error(CellError::Div0)), n(2.0)]), CellError::Div0);
+        // A typed argument is converted as before.
+        assert!(matches!(ev(name, vec![t("2"), n(2.0)]), Value::Number(_)));
+    }
+}
+
 #[test]
 fn pairs_and_regression() {
     close_tol(ev("CORREL", vec![c(&[3.0, 2.0, 4.0, 5.0, 6.0]), c(&[9.0, 7.0, 12.0, 15.0, 17.0])]), 0.997054486, 1e-9);
