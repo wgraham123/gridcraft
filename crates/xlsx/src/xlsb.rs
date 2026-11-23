@@ -11,7 +11,7 @@ use gridcraft_model::{Cell, DefinedName, Formula, Preserved, PreservedPart, Pres
 
 use crate::write::{NS_MAIN, NS_REL, XML_DECL};
 use crate::xml::{esc, esc_attr};
-use crate::{IoError, ReadReport};
+use crate::{FunctionInfo, IoError, ReadReport};
 
 fn map_error(err: craft_xlsx::Error) -> IoError {
     match err {
@@ -90,6 +90,11 @@ fn map_formula(f: &craft_xlsx::CellFormula, at: craft_xlsx::CellRef, report: &mu
     }
 }
 
+/// The cells holding a formula that is not an array formula.
+fn legacy_cells(sheet: &Sheet) -> Vec<CellRef> {
+    sheet.cells.iter().filter(|(_, c)| c.formula.as_ref().is_some_and(|f| f.array.is_none() && !f.dynamic)).map(|(at, _)| at).collect()
+}
+
 fn import_defined_names(book: &craft_xlsx::Workbook, file_to_model: &[Option<usize>], wb: &mut Workbook) {
     for d in &book.defined_names {
         let scope = match d.local_sheet_id {
@@ -115,7 +120,14 @@ fn import_defined_names(book: &craft_xlsx::Workbook, file_to_model: &[Option<usi
 
 /// Imports worksheet cell values, formulas, defined names, and merged cells. Number formats are
 /// omitted; dates remain serial numbers with the workbook's original date system. Inspect warnings.
+/// Legacy formulas are read with the default [`FunctionInfo`].
 pub fn read_xlsb(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+    read_xlsb_with(bytes, FunctionInfo::default())
+}
+
+/// [`read_xlsb`] with the function library's facts, which decide where the legacy formulas get
+/// Excel's implicit `@`.
+pub fn read_xlsb_with(bytes: &[u8], functions: FunctionInfo) -> Result<(Workbook, ReadReport), IoError> {
     let limits = import_limits();
     let mut package = craft_xlsx::Package::open(bytes, &limits).map_err(map_error)?;
     if !package.is_binary() {
@@ -207,6 +219,12 @@ pub fn read_xlsb(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
     if wb.sheets.is_empty() {
         return Err(IoError::Format("XLSB: no supported worksheets".into()));
     }
+    // A formula outside an array is a legacy (pre-dynamic-array) one, as in an .xlsx without `cm`
+    // and every .xls formula: read with Excel's implicit `@`, so `=A1:A3` and `=ABS(A1:A3)` stay
+    // one value instead of spilling (#4665). Array formulas, dynamic ones included, are read as
+    // they are.
+    let legacy = wb.sheets.iter().enumerate().map(|(si, s)| (si, legacy_cells(s))).collect();
+    crate::array_formula::apply_legacy(&mut wb, legacy, functions);
     wb.set_active_sheet(wb.sheets.iter().position(|s| s.visibility == Visibility::Visible).unwrap_or(0));
     Ok((wb, report))
 }
