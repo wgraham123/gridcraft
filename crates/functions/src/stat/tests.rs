@@ -886,13 +886,13 @@ fn gamma_density_at_zero_shape_one_is_num() {
 #[test]
 fn distributions_keep_precision_with_large_parameters() {
     for (name, args, want) in [
-        ("BETA.DIST", vec![n(1e-8), n(2.0), n(1e8), b(true)], 0.264_241_121_335_909_79),
-        ("F.DIST", vec![n(1.01), n(5.0), n(1e8), b(true)], 0.590_191_323_228_509_55),
+        ("BETA.DIST", vec![n(1e-8), n(2.0), n(1e8), b(true)], 0.264_241_121_335_909_77),
+        ("F.DIST", vec![n(1.01), n(5.0), n(1e8), b(true)], 0.590_191_323_228_509_5),
         ("CHISQ.DIST", vec![n(1e6), n(1e6), b(true)], 0.500_188_063_196_605_5),
-        ("CHISQ.DIST", vec![n(1_001_000.0), n(1e6), b(true)], 0.760_323_195_174_478_64),
-        ("T.DIST", vec![n(0.5), n(1e8), b(true)], 0.691_462_460_723_911_03),
-        ("T.DIST", vec![n(0.5), n(1e10), b(true)], 0.691_462_461_268_512_08),
-        ("T.DIST.2T", vec![n(0.5), n(1e8)], 0.617_075_078_552_177_94),
+        ("CHISQ.DIST", vec![n(1_001_000.0), n(1e6), b(true)], 0.760_323_195_174_478_7),
+        ("T.DIST", vec![n(0.5), n(1e8), b(true)], 0.691_462_460_723_911),
+        ("T.DIST", vec![n(0.5), n(1e10), b(true)], 0.691_462_461_268_512_1),
+        ("T.DIST.2T", vec![n(0.5), n(1e8)], 0.617_075_078_552_177_9),
     ] {
         close_tol(ev(name, args), want, 1e-13);
     }
