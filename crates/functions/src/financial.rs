@@ -6,7 +6,9 @@
 use gridcraft_core::date::{datetime_from_serial, days_in_month, is_leap, max_serial, serial_from_ymd};
 use gridcraft_core::{CellError, DateSystem, Value};
 
-use crate::util::{R, S, array_numbers, as_array, flatten, has, num, num_val, numbers, opt_bool, opt_num, round_half_away, text, to_sig_digits};
+use crate::util::{
+    R, S, array_numbers, as_array, flatten, has, no_logicals, num, num_val, numbers, opt_bool, opt_num, round_half_away, text, to_sig_digits,
+};
 use crate::{Arg, Ctx, FnSpec, VAR};
 
 mod day_count;
@@ -177,7 +179,16 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             "Future value of a principal after a series of compound rates.",
             fvschedule
         ),
-        f!("EFFECT", 2, 2, Financial, S, "EFFECT(nominal_rate, npery)", "Effective annual rate from a nominal rate and compounding periods.", effect),
+        f!(
+            "EFFECT",
+            2,
+            2,
+            Financial,
+            S,
+            "EFFECT(nominal_rate, npery)",
+            "Effective annual rate from a nominal rate and compounding periods.",
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| effect(a, c))
+        ),
         f!(
             "NOMINAL",
             2,
@@ -186,7 +197,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "NOMINAL(effect_rate, npery)",
             "Nominal annual rate from an effective rate and compounding periods.",
-            nominal
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| nominal(a, c))
         ),
         f!("ISPMT", 4, 4, Financial, S, "ISPMT(rate, per, nper, pv)", "Interest paid in a period of a loan with even principal payments.", ispmt),
         f!("PDURATION", 3, 3, Financial, S, "PDURATION(rate, pv, fv)", "Periods needed for an investment to grow to a target value.", pduration),
@@ -199,9 +210,18 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "DOLLARDE(fractional_dollar, fraction)",
             "Converts a fractional price notation to a decimal number.",
-            dollarde
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| dollarde(a, c))
         ),
-        f!("DOLLARFR", 2, 2, Financial, S, "DOLLARFR(decimal_dollar, fraction)", "Converts a decimal price to fractional notation.", dollarfr),
+        f!(
+            "DOLLARFR",
+            2,
+            2,
+            Financial,
+            S,
+            "DOLLARFR(decimal_dollar, fraction)",
+            "Converts a decimal price to fractional notation.",
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| dollarfr(a, c))
+        ),
         f!("SLN", 3, 3, Financial, S, "SLN(cost, salvage, life)", "Straight-line depreciation for one period.", sln),
         f!("SYD", 4, 4, Financial, S, "SYD(cost, salvage, life, per)", "Sum-of-years'-digits depreciation for a period.", syd),
         f!("DB", 4, 5, Financial, S, "DB(cost, salvage, life, period, [month])", "Fixed-declining-balance depreciation for a period.", db),
@@ -233,7 +253,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "AMORLINC(cost, date_purchased, first_period, salvage, period, rate, [basis])",
             "French linear depreciation prorated for the first period.",
-            amorlinc
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| amorlinc(a, c))
         ),
         f!(
             "AMORDEGRC",
@@ -243,7 +263,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "AMORDEGRC(cost, date_purchased, first_period, salvage, period, rate, [basis])",
             "French degressive depreciation with a life-based coefficient.",
-            amordegrc
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| amordegrc(a, c))
         ),
         f!(
             "ACCRINT",
@@ -253,7 +273,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "ACCRINT(issue, first_interest, settlement, rate, par, frequency, [basis], [calc_method])",
             "Accrued interest of a security paying periodic interest.",
-            accrint
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[7]).and_then(|()| accrint(a, c))
         ),
         f!(
             "ACCRINTM",
@@ -263,7 +283,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "ACCRINTM(issue, settlement, rate, [par], [basis])",
             "Accrued interest of a security paying interest at maturity.",
-            accrintm
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| accrintm(a, c))
         ),
         f!(
             "COUPDAYBS",
@@ -273,7 +293,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "COUPDAYBS(settlement, maturity, frequency, [basis])",
             "Days from the start of the coupon period to settlement.",
-            coupdaybs
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| coupdaybs(a, c))
         ),
         f!(
             "COUPDAYS",
@@ -283,7 +303,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "COUPDAYS(settlement, maturity, frequency, [basis])",
             "Days in the coupon period that contains settlement.",
-            coupdays
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| coupdays(a, c))
         ),
         f!(
             "COUPDAYSNC",
@@ -293,9 +313,18 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "COUPDAYSNC(settlement, maturity, frequency, [basis])",
             "Days from settlement to the next coupon date.",
-            coupdaysnc
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| coupdaysnc(a, c))
         ),
-        f!("COUPNCD", 3, 4, Financial, S, "COUPNCD(settlement, maturity, frequency, [basis])", "Next coupon date after settlement.", coupncd),
+        f!(
+            "COUPNCD",
+            3,
+            4,
+            Financial,
+            S,
+            "COUPNCD(settlement, maturity, frequency, [basis])",
+            "Next coupon date after settlement.",
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| coupncd(a, c))
+        ),
         f!(
             "COUPPCD",
             3,
@@ -304,7 +333,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "COUPPCD(settlement, maturity, frequency, [basis])",
             "Previous coupon date on or before settlement.",
-            couppcd
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| couppcd(a, c))
         ),
         f!(
             "COUPNUM",
@@ -314,9 +343,18 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "COUPNUM(settlement, maturity, frequency, [basis])",
             "Number of coupons payable between settlement and maturity.",
-            coupnum
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| coupnum(a, c))
         ),
-        f!("DISC", 4, 5, Financial, S, "DISC(settlement, maturity, pr, redemption, [basis])", "Discount rate of a security.", disc),
+        f!(
+            "DISC",
+            4,
+            5,
+            Financial,
+            S,
+            "DISC(settlement, maturity, pr, redemption, [basis])",
+            "Discount rate of a security.",
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| disc(a, c))
+        ),
         f!(
             "PRICEDISC",
             4,
@@ -325,7 +363,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "PRICEDISC(settlement, maturity, discount, redemption, [basis])",
             "Price per 100 face value of a discounted security.",
-            pricedisc
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| pricedisc(a, c))
         ),
         f!(
             "YIELDDISC",
@@ -335,7 +373,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "YIELDDISC(settlement, maturity, pr, redemption, [basis])",
             "Annual yield of a discounted security.",
-            yielddisc
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| yielddisc(a, c))
         ),
         f!(
             "INTRATE",
@@ -345,7 +383,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "INTRATE(settlement, maturity, investment, redemption, [basis])",
             "Interest rate of a fully invested security.",
-            intrate
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| intrate(a, c))
         ),
         f!(
             "RECEIVED",
@@ -355,7 +393,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "RECEIVED(settlement, maturity, investment, discount, [basis])",
             "Amount received at maturity for a fully invested security.",
-            received
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| received(a, c))
         ),
         f!(
             "TBILLPRICE",
@@ -377,7 +415,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "PRICEMAT(settlement, maturity, issue, rate, yld, [basis])",
             "Price per 100 face value of a security paying interest at maturity.",
-            pricemat
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| pricemat(a, c))
         ),
         f!(
             "YIELDMAT",
@@ -387,7 +425,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "YIELDMAT(settlement, maturity, issue, rate, pr, [basis])",
             "Annual yield of a security paying interest at maturity.",
-            yieldmat
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| yieldmat(a, c))
         ),
         f!(
             "PRICE",
@@ -397,7 +435,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "PRICE(settlement, maturity, rate, yld, redemption, frequency, [basis])",
             "Price per 100 face value of a security paying periodic interest.",
-            price
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| price(a, c))
         ),
         f!(
             "YIELD",
@@ -407,7 +445,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "YIELD(settlement, maturity, rate, pr, redemption, frequency, [basis])",
             "Yield of a security paying periodic interest.",
-            yield_
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| yield_(a, c))
         ),
         f!(
             "DURATION",
@@ -417,7 +455,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "DURATION(settlement, maturity, coupon, yld, frequency, [basis])",
             "Macaulay duration of a security with periodic interest.",
-            duration
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| duration(a, c))
         ),
         f!(
             "MDURATION",
@@ -427,7 +465,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "MDURATION(settlement, maturity, coupon, yld, frequency, [basis])",
             "Modified duration of a security with periodic interest.",
-            mduration
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| mduration(a, c))
         ),
         f!(
             "ODDFPRICE",
@@ -437,7 +475,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "ODDFPRICE(settlement, maturity, issue, first_coupon, rate, yld, redemption, frequency, [basis])",
             "Price per 100 face value of a security with an odd first period.",
-            oddfprice
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| oddfprice(a, c))
         ),
         f!(
             "ODDFYIELD",
@@ -447,7 +485,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "ODDFYIELD(settlement, maturity, issue, first_coupon, rate, pr, redemption, frequency, [basis])",
             "Yield of a security with an odd first period.",
-            oddfyield
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| oddfyield(a, c))
         ),
         f!(
             "ODDLPRICE",
@@ -457,7 +495,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "ODDLPRICE(settlement, maturity, last_interest, rate, yld, redemption, frequency, [basis])",
             "Price per 100 face value of a security with an odd last period.",
-            oddlprice
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| oddlprice(a, c))
         ),
         f!(
             "ODDLYIELD",
@@ -467,7 +505,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "ODDLYIELD(settlement, maturity, last_interest, rate, pr, redemption, frequency, [basis])",
             "Yield of a security with an odd last period.",
-            oddlyield
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| oddlyield(a, c))
         ),
         f!(
             "EUROCONVERT",
