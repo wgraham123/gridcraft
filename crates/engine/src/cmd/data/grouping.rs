@@ -230,6 +230,11 @@ pub(super) fn subtotal(s: &mut Session, p: &Json) -> Result<Json> {
         .and_then(Json::as_array)
         .map(|a| a.iter().filter_map(|c| col_param(Some(c), r.start.col)).collect())
         .unwrap_or_else(|| vec![r.end.col]);
+    // Groups and totals come from the range's own columns, as in Excel: a column outside it is
+    // refused before anything is inserted or written.
+    if let Some(c) = std::iter::once(group_col).chain(cols.iter().copied()).find(|c| !(r.start.col..=r.end.col).contains(c)) {
+        return Err(bad("data.subtotal", format!("column {} is outside {}", gridcraft_core::col_to_letters(c), r.a1())));
+    }
     let label = match func {
         "count" => "Count",
         "average" => "Average",

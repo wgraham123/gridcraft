@@ -1882,6 +1882,30 @@ fn subtotal_groups_everything_under_the_grand_total() {
     assert_eq!(v(&s, "B7"), Value::Number(60.0));
 }
 
+/// #3948: a group or total column outside the range is refused before anything changes; the
+/// range's own columns still work.
+#[test]
+fn subtotal_refuses_columns_outside_its_range() {
+    let mut s = s();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["Group", "Amount"], ["A", 10], ["A", 20], ["B", 30]]})).unwrap();
+    s.execute("range.setValues", json!({"range": "C2", "values": [[901], [902], [903]]})).unwrap();
+    let cells = |s: &Session| -> Vec<Value> {
+        (0..8).flat_map(|r| (0..3).map(move |c| (r, c))).map(|(r, c)| s.doc().unwrap().wb.active().unwrap().value(CellRef::new(r, c))).collect()
+    };
+    let before = cells(&s);
+    for params in [
+        json!({"range": "A1:B4", "groupBy": "A", "columns": ["C"], "function": "sum"}),
+        json!({"range": "A1:B4", "groupBy": "C", "columns": ["B"], "function": "sum"}),
+        json!({"range": "A1:B4", "groupBy": 0, "columns": [2]}),
+    ] {
+        assert!(s.execute("data.subtotal", params.clone()).is_err(), "{params}");
+        assert_eq!(cells(&s), before, "{params} changed the sheet");
+        assert!(s.doc().unwrap().wb.active().unwrap().rows.values().all(|l| l.outline == 0), "{params} grouped rows");
+    }
+    s.execute("data.subtotal", json!({"range": "A1:B4", "groupBy": 0, "columns": [1]})).unwrap();
+    assert_eq!(v(&s, "B7"), Value::Number(60.0));
+}
+
 #[test]
 fn formatting_and_styles() {
     let mut s = s();
