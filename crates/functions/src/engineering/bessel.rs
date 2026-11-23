@@ -206,9 +206,18 @@ impl LnCosh for f64 {
     }
 }
 
+/// A Bessel argument: a number, so TRUE or FALSE, typed or from a cell, is #VALUE! as in Excel,
+/// where most functions read 1 or 0.
+fn bessel_num(a: &[Arg], i: usize) -> R<f64> {
+    match a.get(i).map(|x| x.value.scalar()) {
+        Some(Value::Bool(_)) => Err(CellError::Value),
+        _ => num(a, i),
+    }
+}
+
 fn bessel_args(a: &[Arg]) -> R<(f64, u32)> {
-    let x = num(a, 0)?;
-    let n = num(a, 1)?.trunc();
+    let x = bessel_num(a, 0)?;
+    let n = bessel_num(a, 1)?.trunc();
     if n < 0.0 {
         return Err(CellError::Num);
     }
