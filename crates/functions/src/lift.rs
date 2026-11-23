@@ -72,6 +72,58 @@ const LIFTED_SCAN_BUDGET: usize = 500_000_000;
 /// lifted over `n` criteria does `n` x (range cells) work, like the [`SCANS`] lookups.
 const CRITERIA: &[&str] = &["COUNTIF", "COUNTIFS", "SUMIF", "SUMIFS", "AVERAGEIF", "AVERAGEIFS", "MAXIFS", "MINIFS"];
 
+/// Functions that read every cell of their array arguments on each call (sorting, ranking,
+/// fitting, summing or joining them), so a call lifted over `n` elements does `n` x (array cells)
+/// work, like the [`CRITERIA`] aggregates: `LARGE(SEQUENCE(1e6), SEQUENCE(1e6))` would otherwise
+/// run for hours and hang opening the file holding it (#4572).
+const READS_ALL: &[&str] = &[
+    // Statistics.
+    "LARGE",
+    "SMALL",
+    "RANK",
+    "RANK.EQ",
+    "RANK.AVG",
+    "PERCENTILE",
+    "PERCENTILE.INC",
+    "PERCENTILE.EXC",
+    "QUARTILE",
+    "QUARTILE.INC",
+    "QUARTILE.EXC",
+    "PERCENTRANK",
+    "PERCENTRANK.INC",
+    "PERCENTRANK.EXC",
+    "TRIMMEAN",
+    "PROB",
+    "T.TEST",
+    "TTEST",
+    "Z.TEST",
+    "ZTEST",
+    "FORECAST",
+    "FORECAST.LINEAR",
+    "FORECAST.ETS",
+    "FORECAST.ETS.CONFINT",
+    "FORECAST.ETS.SEASONALITY",
+    "FORECAST.ETS.STAT",
+    // Math, financial and date functions over a list of values, rates or holidays.
+    "SERIESSUM",
+    "NPV",
+    "XNPV",
+    "IRR",
+    "XIRR",
+    "MIRR",
+    "FVSCHEDULE",
+    "NETWORKDAYS",
+    "NETWORKDAYS.INTL",
+    "WORKDAY",
+    "WORKDAY.INTL",
+    // Text functions over a list of texts or delimiters.
+    "TEXTJOIN",
+    "ARRAYTOTEXT",
+    "TEXTBEFORE",
+    "TEXTAFTER",
+    "TEXTSPLIT",
+];
+
 /// Cumulative TVM functions that step through every period from `start_period` (argument 3) to
 /// `end_period` (argument 4) on each call.
 const PERIOD_LOOPS: &[&str] = &["CUMIPMT", "CUMPRINC"];
@@ -81,11 +133,11 @@ const PERIOD_LOOPS: &[&str] = &["CUMIPMT", "CUMPRINC"];
 const PERIOD_COST: usize = 16;
 
 /// The work every lifted call of `spec` repeats over its non-lifted arguments: the longest vector
-/// a [`SCANS`] lookup searches, or every cell a [`CRITERIA`] aggregate tests. 0 for other
-/// functions.
+/// a [`SCANS`] lookup searches, or every cell a [`CRITERIA`] aggregate tests or a [`READS_ALL`]
+/// function reads. 0 for other functions.
 fn scan_len(spec: &FnSpec, args: &[Arg]) -> usize {
     let scans = SCANS.contains(&spec.name);
-    if !scans && !CRITERIA.contains(&spec.name) {
+    if !scans && !CRITERIA.contains(&spec.name) && !READS_ALL.contains(&spec.name) {
         return 0;
     }
     // SUMIF and AVERAGEIF read the optional third range only at the coordinates of the first.
@@ -300,6 +352,33 @@ mod tests {
         assert_eq!(rows_of(&counts), vec![vec![nv(2.0)], vec![nv(1.0)], vec![nv(0.0)]]);
         for name in super::CRITERIA.iter().chain(super::PERIOD_LOOPS) {
             assert!(crate::lookup(name).is_some(), "{name} isn't registered");
+        }
+    }
+
+    /// Security: a lifted function that reads all of an array on every call (LARGE, RANK.EQ,
+    /// TRIMMEAN, FORECAST, XNPV, TEXTJOIN…) is charged elements x array cells, so a one-cell
+    /// `LARGE(SEQUENCE(1e6), SEQUENCE(1e6))` is `#NUM!` at once instead of hanging the open (#4572).
+    #[test]
+    fn lifted_functions_reading_whole_arrays_stop_past_their_work_budget() {
+        use gridcraft_core::Array;
+        let tall = |n: usize| av(Array::filled(n, 1, nv(1.0)).into());
+        // 501 elements over 1,000,000 cells is just past the budget.
+        is_err(ev("LARGE", vec![tall(1_000_000), tall(501)]), CellError::Num);
+        is_err(ev("SMALL", vec![tall(1_000_000), tall(501)]), CellError::Num);
+        is_err(ev("TRIMMEAN", vec![tall(1_000_000), av(Array::filled(501, 1, nv(0.1)).into())]), CellError::Num);
+        is_err(ev("RANK.EQ", vec![tall(501), tall(1_000_000)]), CellError::Num);
+        is_err(ev("PERCENTILE.INC", vec![tall(1_000_000), av(Array::filled(501, 1, nv(0.5)).into())]), CellError::Num);
+        // Two arrays of 500,000 cells count together.
+        is_err(ev("FORECAST.LINEAR", vec![tall(501), tall(500_000), tall(500_000)]), CellError::Num);
+        is_err(ev("XNPV", vec![av(Array::filled(501, 1, nv(0.1)).into()), tall(500_000), tall(500_000)]), CellError::Num);
+        is_err(ev("TEXTJOIN", vec![t(","), av(Array::filled(501, 1, Value::Bool(true)).into()), tall(1_000_000)]), CellError::Num);
+        // Within the budget they lift as before.
+        let top = ev("LARGE", vec![av(col(&[5.0, 9.0, 7.0])), av(col(&[1.0, 2.0]))]);
+        assert_eq!(rows_of(&top), vec![vec![nv(9.0)], vec![nv(7.0)]]);
+        let ranks = ev("RANK.EQ", vec![av(col(&[7.0, 9.0])), av(col(&[5.0, 9.0, 7.0]))]);
+        assert_eq!(rows_of(&ranks), vec![vec![nv(2.0)], vec![nv(1.0)]]);
+        for name in super::READS_ALL {
+            assert!(crate::lookup(name).is_some_and(|s| (0..s.max_args.min(12)).any(|i| s.is_scalar_arg(i))), "{name} isn't a lifting function");
         }
     }
 
