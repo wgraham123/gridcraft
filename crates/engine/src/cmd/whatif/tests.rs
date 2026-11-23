@@ -163,6 +163,11 @@ fn data_tables() {
     assert_eq!(r["mode"], "twoVariable");
     assert_eq!(n(&s, "M2"), 15.0);
     assert_eq!(n(&s, "N3"), 40.0);
+    // One cell as both inputs is refused, however it is written, and the results stay (#3917).
+    for (row, col) in [("B1", "B1"), ("B2", "$B$2"), ("Sheet1!B1", "b1")] {
+        assert!(s.execute("data.dataTable", json!({"range": "L1:N3", "rowInput": row, "columnInput": col})).is_err(), "{row} / {col}");
+        assert_eq!((n(&s, "M2"), n(&s, "N3")), (15.0, 40.0));
+    }
     assert!(s.execute("data.dataTable", json!({"range": "L1:N3"})).is_err());
     assert!(s.execute("data.dataTable", json!({"range": "A1:XFD100000", "columnInput": "B2"})).is_err());
     assert!(s.execute("data.dataTable", json!({"range": "L1:N3", "columnInput": "M2"})).is_err());
