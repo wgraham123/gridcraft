@@ -681,6 +681,21 @@ fn normal() {
     close_tol(ev("LOGINV", vec![n(0.039084), n(3.5), n(1.2)]), 4.0000252, D7);
 }
 
+/// #4022: the inverse normal keeps its precision near probability 1, where the upper tail is
+/// the mirror image of the lower one. Expected values from Wichura's AS241 (the algorithm of
+/// Python's `statistics.NormalDist.inv_cdf`), which Excel matches here.
+#[test]
+fn normal_inverses_keep_precision_near_one() {
+    let p = 0.999_999_999_999_999;
+    close_tol(ev("NORM.S.INV", vec![n(p)]), 7.941_444_487_415_977, 1e-13);
+    close_tol(ev("NORM.INV", vec![n(p), n(0.0), n(1.0)]), 7.941_444_487_415_977, 1e-13);
+    close_tol(ev("LOGNORM.INV", vec![n(p), n(0.0), n(1.0)]), 2_811.418_635_478_142_7, 1e-12);
+    for p in [0.6, 0.9, 0.99, 0.999_999, 1.0 - 1e-12] {
+        let (Value::Number(hi), Value::Number(lo)) = (ev("NORM.S.INV", vec![n(p)]), ev("NORM.S.INV", vec![n(1.0 - p)])) else { panic!("{p}") };
+        assert_eq!(hi, -lo, "symmetric at {p}");
+    }
+}
+
 #[test]
 fn t_chi_f() {
     close_tol(ev("T.DIST", vec![n(0.0), n(6e307), b(false)]), 0.3989422804, 1e-10);

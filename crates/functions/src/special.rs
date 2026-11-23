@@ -281,6 +281,11 @@ pub(crate) fn norm_inv(p: f64) -> f64 {
     if !(p > 0.0 && p < 1.0) {
         return f64::NAN;
     }
+    // The upper half by symmetry: 1 - p is exact for p >= 0.5, while the refinement below would
+    // compare `norm_cdf(x)` with p where both are near 1 and most digits cancel (#4022).
+    if p > 0.5 {
+        return -norm_inv(1.0 - p);
+    }
     // Acklam's rational approximation, then one Halley refinement step.
     const A: [f64; 6] = [
         -3.969_683_028_665_376e1,
