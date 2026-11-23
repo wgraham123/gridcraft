@@ -867,6 +867,16 @@ fn continuous() {
     close_tol(r[0][1].clone(), 0.841344746, 1e-8);
 }
 
+/// #4031: BETA.INV keeps its precision near probability 1. Beta(1, 3) has the closed form
+/// 1 - (1 - p)^(1/3) to check against; the issue's Beta(2, 2) case is checked against Excel.
+#[test]
+fn beta_inverse_keeps_precision_near_one() {
+    for p in [0.6_f64, 0.9, 0.99, 0.999_999, 1.0 - 1e-12, 0.999_999_999_999_999] {
+        close_tol(ev("BETA.INV", vec![n(p), n(1.0), n(3.0)]), 1.0 - (1.0 - p).cbrt(), 1e-15);
+    }
+    close_tol(ev("BETA.INV", vec![n(0.999_999_999_999_999), n(2.0), n(2.0)]), 0.999_999_981_749_879_1, 1e-15);
+}
+
 #[test]
 fn gamma_density_at_zero_shape_one_is_num() {
     for scale in [0.1, 0.9, 1.0, 1.9, 2.0, 10_000_000_000.0] {
