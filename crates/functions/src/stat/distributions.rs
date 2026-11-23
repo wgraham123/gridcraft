@@ -37,6 +37,12 @@ fn t_inv_upper(q: f64, v: f64) -> f64 {
     if q >= 0.5 {
         return 0.0;
     }
+    // Close to the centre P(T > t) is 0.5 minus a sliver that the tail form loses (#4023): solve
+    // the central probability P(|T| < t) = I_(t²/(v+t²))(1/2, v/2) = 1 - 2q instead, which is
+    // exact for q >= 0.25 and small where t is.
+    if q > 0.25 {
+        return invert(|t| reg_inc_beta(t * t / (v + t * t), 0.5, v / 2.0), 1.0 - 2.0 * q, 0.0, 1.0, 1e60);
+    }
     invert(|t| t_upper(t, v), q, 0.0, 1.0, 1e60)
 }
 
