@@ -768,6 +768,10 @@ pub(super) fn beta_inv(a: &[Arg], _: C) -> R<Value> {
         0.0
     } else if p == 1.0 {
         1.0
+    } else if p > 0.5 {
+        // Near probability 1 the CDF has no digits left to tell quantiles apart. By symmetry,
+        // I_x(a, b) = 1 - I_(1-x)(b, a): solve the lower tail at the exact 1 - p (#4031).
+        1.0 - invert(|y| reg_inc_beta(y, be, al), 1.0 - p, 0.0, 1.0, 1.0)
     } else {
         invert(|x| reg_inc_beta(x, al, be), p, 0.0, 1.0, 1.0)
     };

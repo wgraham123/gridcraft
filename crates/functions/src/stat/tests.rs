@@ -364,6 +364,16 @@ fn percentiles() {
     close(ev("PERCENTRANK.EXC", vec![k, n(2.123_456_789), n(16.0)]), 0.265_432_098_625);
 }
 
+/// #4031: BETA.INV keeps its precision near probability 1. Beta(1, 3) has the closed form
+/// 1 - (1 - p)^(1/3) to check against; the issue's Beta(2, 2) case is checked against Excel.
+#[test]
+fn beta_inverse_keeps_precision_near_one() {
+    for p in [0.6_f64, 0.9, 0.99, 0.999_999, 1.0 - 1e-12, 0.999_999_999_999_999] {
+        close_tol(ev("BETA.INV", vec![n(p), n(1.0), n(3.0)]), 1.0 - (1.0 - p).cbrt(), 1e-15);
+    }
+    close_tol(ev("BETA.INV", vec![n(0.999_999_999_999_999), n(2.0), n(2.0)]), 0.999_999_981_749_879_1, 1e-15);
+}
+
 #[test]
 fn pairs_and_regression() {
     close_tol(ev("CORREL", vec![c(&[3.0, 2.0, 4.0, 5.0, 6.0]), c(&[9.0, 7.0, 12.0, 15.0, 17.0])]), 0.997054486, 1e-9);
