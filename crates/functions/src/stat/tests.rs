@@ -364,6 +364,19 @@ fn percentiles() {
     close(ev("PERCENTRANK.EXC", vec![k, n(2.123_456_789), n(16.0)]), 0.265_432_098_625);
 }
 
+/// #4018: CHISQ.INV and GAMMA.INV keep their precision near probability 1. Two degrees of
+/// freedom and a shape of 1 have closed forms to check against: -2 ln(1 - p) and -beta ln(1 - p).
+#[test]
+fn chi_square_and_gamma_inverses_keep_precision_near_one() {
+    for p in [0.6_f64, 0.9, 0.99, 0.999_999, 1.0 - 1e-12, 0.999_999_999_999_999] {
+        let tail = -(1.0 - p).ln();
+        close_tol(ev("CHISQ.INV", vec![n(p), n(2.0)]), 2.0 * tail, 1e-13);
+        close_tol(ev("GAMMA.INV", vec![n(p), n(1.0), n(3.0)]), 3.0 * tail, 1e-13);
+    }
+    // The issue's Gamma(2, 3) case, against Excel.
+    close_tol(ev("GAMMA.INV", vec![n(0.999_999_999_999_999), n(2.0), n(3.0)]), 114.625_406_266_454_46, 1e-13);
+}
+
 #[test]
 fn pairs_and_regression() {
     close_tol(ev("CORREL", vec![c(&[3.0, 2.0, 4.0, 5.0, 6.0]), c(&[9.0, 7.0, 12.0, 15.0, 17.0])]), 0.997054486, 1e-9);

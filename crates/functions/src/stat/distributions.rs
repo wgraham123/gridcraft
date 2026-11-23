@@ -44,6 +44,11 @@ fn chi_inv(p: f64, v: f64) -> f64 {
     if p <= 0.0 {
         return 0.0;
     }
+    // Near probability 1 the lower tail has no digits left to tell quantiles apart; the upper
+    // tail at the exact 1 - p has them (#4018).
+    if p > 0.5 {
+        return chi_inv_rt(1.0 - p, v);
+    }
     invert(|x| reg_gamma_p(v / 2.0, x / 2.0), p, 0.0, v.max(1.0), 1e60)
 }
 
@@ -706,6 +711,10 @@ pub(super) fn gamma_inv(a: &[Arg], _: C) -> R<Value> {
     }
     if p == 0.0 {
         return num_val(0.0);
+    }
+    // Above the median, the upper tail at the exact 1 - p keeps its digits near 1 (#4018).
+    if p > 0.5 {
+        return num_val(invert(|x| reg_gamma_q(al, x / be), 1.0 - p, 0.0, (al * be).max(1e-3), 1e60));
     }
     num_val(invert(|x| reg_gamma_p(al, x / be), p, 0.0, (al * be).max(1e-3), 1e60))
 }
