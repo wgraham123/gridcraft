@@ -49,11 +49,11 @@ pub(crate) fn arg(args: &[Arg], i: usize) -> R<&Arg> {
     args.get(i).ok_or(CellError::Value)
 }
 
-/// For the functions Excel took over from the Analysis ToolPak (the securities, coupon and
-/// depreciation functions, EFFECT, NOMINAL, DOLLARDE, DOLLARFR and YEARFRAC): their arguments
-/// are numbers or dates, so TRUE or FALSE, typed or read from a cell, is `#VALUE!` where most
-/// functions would read 1 or 0. `flags` lists the positions that are logical flags and take a
-/// boolean. An error before the first boolean is left for the function to return.
+/// For the functions Excel took over from the Analysis ToolPak (the securities and coupon
+/// functions, AMORDEGRC, AMORLINC, EFFECT, NOMINAL, DOLLARDE, DOLLARFR and YEARFRAC): their
+/// arguments are numbers or dates, so TRUE or FALSE, typed or read from a cell, is `#VALUE!` where
+/// most functions would read 1 or 0. `flags` lists the positions that are logical flags and take
+/// a boolean. An error before the first boolean is left for the function to return.
 pub(crate) fn no_logicals(args: &[Arg], flags: &[usize]) -> R<()> {
     for (i, a) in args.iter().enumerate() {
         match a.value {
