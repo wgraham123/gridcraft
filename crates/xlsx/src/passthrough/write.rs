@@ -170,10 +170,12 @@ impl WorkbookKept {
         i + self.sheets.iter().filter(|s| s.before <= i).count()
     }
 
-    /// Where the first visible kept chart sheet is in the file's sheet list, if one is visible.
-    /// Chart sheets are listed in file order, so the ones before it are all earlier in the file.
-    pub fn first_visible(&self) -> Option<usize> {
-        self.sheets.iter().enumerate().find(|(_, s)| s.visibility == Visibility::Visible).map(|(k, s)| s.before + k)
+    /// Where the first visible kept chart sheet is in the file's sheet list, if one is visible,
+    /// with `worksheets` sheets in the model. Chart sheets are listed in file order, so the ones
+    /// before it are all earlier in the file; one recorded past the last worksheet (worksheets
+    /// were deleted since the file was read) is written after it, as [`Self::sheet_entries`] does.
+    pub fn first_visible(&self, worksheets: usize) -> Option<usize> {
+        self.sheets.iter().enumerate().find(|(_, s)| s.visibility == Visibility::Visible).map(|(k, s)| s.before.min(worksheets) + k)
     }
 
     /// The `<sheet>` entries of the chart sheets that go right before the model's sheet `i`

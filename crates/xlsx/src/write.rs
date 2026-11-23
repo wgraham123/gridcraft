@@ -519,7 +519,7 @@ fn write_sheets(
     // A workbook needs a visible tab, and its active tab must be visible. With every worksheet
     // hidden, a visible chart sheet is that tab: the worksheets keep their states (#4673).
     // Otherwise the active worksheet is shown.
-    let chart_tab = if any_visible { None } else { kept.first_visible() };
+    let chart_tab = if any_visible { None } else { kept.first_visible(wb.sheets.len()) };
     let mut ids = crate::passthrough::SheetIds::new(wb, &kept);
     for (i, sheet) in wb.sheets.iter().enumerate() {
         sheets_xml.push_str(&kept.sheet_entries(i, false, &mut ids));
