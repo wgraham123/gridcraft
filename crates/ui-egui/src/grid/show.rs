@@ -725,7 +725,9 @@ pub(crate) fn paint_overlays(input: OverlayInput<'_>) {
     {
         let r = geo.cell_rect(sh, sel.active);
         let (at, pivot) = (geo.mirror_pos(pos2(r.left() + 8.0, r.bottom() + 6.0)), if geo.rtl { Align2::RIGHT_TOP } else { Align2::LEFT_TOP });
-        egui::Area::new(egui::Id::unique("dv_input")).fixed_pos(at).pivot(pivot).order(egui::Order::Tooltip).interactable(false).show(
+        // Below the menus that open over the sheet, as notes are (#3692): right-clicking the cell
+        // makes it the active cell, and its message must not hide the context menu's items.
+        egui::Area::new(egui::Id::unique("dv_input")).fixed_pos(at).pivot(pivot).order(egui::Order::Middle).interactable(false).show(
             ui.ctx(),
             |ui| {
                 egui::Frame::popup(ui.style()).fill(Color32::from_rgb(0xFF, 0xFF, 0xE1)).show(ui, |ui| {
