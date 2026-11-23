@@ -720,3 +720,49 @@ fn xlsb_external_link_ordinals_preserve_missing_slots_on_xlsx_save() {
         "{link_rels}"
     );
 }
+
+/// #4665: an XLSB formula outside an array is a legacy one, read with Excel's implicit `@` as
+/// in .xlsx and .xls, so `=$A$1:$A$3` and `=ABS($A$1:$A$3)` stay one value; SUM, which takes
+/// the range whole, is unchanged.
+#[test]
+fn xlsb_legacy_formulas_keep_implicit_intersection() {
+    let area = {
+        let mut v = vec![0x25]; // PtgArea: $A$1:$A$3
+        v.extend(0u32.to_le_bytes());
+        v.extend(2u32.to_le_bytes());
+        v.extend(0u16.to_le_bytes());
+        v.extend(0u16.to_le_bytes());
+        v
+    };
+    let call = |iftab: u16| {
+        let mut v = area.clone();
+        v.push(0x41); // PtgFunc
+        v.extend(iftab.to_le_bytes());
+        v
+    };
+    let sum = {
+        let mut v = area.clone();
+        v.extend([0x22, 1]); // PtgFuncVar, one argument
+        v.extend(4u16.to_le_bytes()); // SUM
+        v
+    };
+    let fmla = |col: u32, rgce: &[u8]| {
+        let mut data = col.to_le_bytes().to_vec();
+        data.extend([0; 4]);
+        data.extend(0f64.to_le_bytes());
+        data.extend([0; 2]);
+        data.extend((rgce.len() as u32).to_le_bytes());
+        data.extend(rgce);
+        data.extend(0u32.to_le_bytes());
+        record(9, &data)
+    };
+    let mut data = row(1);
+    data.extend(fmla(1, &area));
+    data.extend(fmla(3, &call(24))); // ABS
+    data.extend(fmla(5, &sum));
+    let (wb, _) = read_xlsb(&file(&worksheet(&data, &[]))).unwrap();
+    let text = |col: u32| wb.sheets[0].cell(CellRef::new(1, col)).and_then(|c| c.formula.as_ref()).map(|f| f.text.to_string()).unwrap_or_default();
+    assert_eq!(text(1), "@$A$1:$A$3");
+    assert_eq!(text(3), "ABS(@$A$1:$A$3)");
+    assert_eq!(text(5), "SUM($A$1:$A$3)");
+}
