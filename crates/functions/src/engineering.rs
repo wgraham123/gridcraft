@@ -651,6 +651,16 @@ mod tests {
         is_err(ev("BESSELY", vec![n(0.0), n(1.0)]), CellError::Num);
         is_err(ev("BESSELK", vec![n(-1.0), n(1.0)]), CellError::Num);
         is_err(ev("BESSELJ", vec![t("x"), n(1.0)]), CellError::Value);
+        // TRUE and FALSE are refused in either place, typed or from a cell (#4040); an error
+        // in x still comes first.
+        for name in ["BESSELJ", "BESSELY", "BESSELI", "BESSELK"] {
+            for logical in [b(true), b(false), rf(Value::Bool(true)), rf(Value::Bool(false))] {
+                is_err(ev(name, vec![logical.clone(), n(2.0)]), CellError::Value);
+                is_err(ev(name, vec![n(1.0), logical]), CellError::Value);
+            }
+            is_err(ev(name, vec![e(CellError::NA), b(true)]), CellError::NA);
+            assert!(matches!(ev(name, vec![rf(Value::Number(1.0)), rf(Value::Number(2.0))]), Value::Number(_)));
+        }
         // Wronskian J_{1}Y_0 − J_0Y_1 = 2/(πx), checking series and asymptotic regimes.
         for x in [0.5, 7.0, 15.0, 24.0, 30.0, 80.0] {
             let j0 = match ev("BESSELJ", vec![n(x), n(0.0)]) {
