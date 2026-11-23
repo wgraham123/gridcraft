@@ -880,6 +880,28 @@ fn gamma_density_at_zero_shape_one_is_num() {
     is_err(ev("GAMMA.DIST", vec![n(-0.1), n(1.0), n(2.0), b(false)]), CellError::Num);
 }
 
+/// With one large parameter, the beta and gamma prefactors and ln B(a, b) are no longer the
+/// difference of huge log-gammas, so the distributions and their densities keep their digits.
+/// References: 40-digit incomplete beta and gamma (mpmath); the check is relative.
+#[test]
+fn distributions_keep_precision_with_large_parameters() {
+    for (name, args, want) in [
+        ("BETA.DIST", vec![n(1e-8), n(2.0), n(1e8), b(true)], 0.264_241_121_335_909_77),
+        ("F.DIST", vec![n(1.01), n(5.0), n(1e8), b(true)], 0.590_191_323_228_509_5),
+        ("CHISQ.DIST", vec![n(1e6), n(1e6), b(true)], 0.500_188_063_196_605_5),
+        ("CHISQ.DIST", vec![n(1_001_000.0), n(1e6), b(true)], 0.760_323_195_174_478_7),
+        ("T.DIST", vec![n(0.5), n(1e8), b(true)], 0.691_462_460_723_911),
+        ("T.DIST", vec![n(0.5), n(1e10), b(true)], 0.691_462_461_268_512_1),
+        ("T.DIST.2T", vec![n(0.5), n(1e8)], 0.617_075_078_552_177_9),
+        ("CHISQ.DIST", vec![n(1e6), n(1e6), b(false)], 2.820_947_447_580_834e-4),
+        ("GAMMA.DIST", vec![n(1e7), n(1e7), n(1.0), b(false)], 1.261_566_250_497_028e-4),
+        ("BETA.DIST", vec![n(1e-8), n(2.0), n(1e8), b(false)], 36_787_944.668_963_4),
+        ("F.DIST", vec![n(1.01), n(5.0), n(1e8), b(false)], 0.604_090_915_815_427_5),
+    ] {
+        assert!(rel_err(ev(name, args.clone()), want) < 1e-13, "{name}{args:?}");
+    }
+}
+
 #[test]
 fn weibull_density_at_zero_is_zero() {
     for shape in [0.5, 1.0, 2.0] {
