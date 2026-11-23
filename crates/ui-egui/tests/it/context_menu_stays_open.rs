@@ -102,6 +102,25 @@ fn a_quick_right_click_between_pixels_keeps_the_menu_open_on_retina() {
 }
 
 #[test]
+fn a_shown_note_stays_below_the_context_menu() {
+    // #3692: a note shown at all times was painted over the menu and hid some of its items.
+    let mut h = harness();
+    h.state_mut().session.execute("review.newNote", serde_json::json!({"cell": "B2", "text": "Always shown"})).unwrap();
+    h.state_mut().session.execute("review.showNote", serde_json::json!({"cell": "B2"})).unwrap();
+    h.run_steps(2);
+    quick_right_click(&mut h, "B2");
+    assert!(h.state().grid.context_menu.is_some(), "the menu is open");
+    let (note, menu) = (egui::Id::unique(("note", 1u32, 1u32)), egui::Id::unique("cell_context"));
+    let rects = h.ctx.memory(|m| (m.area_rect(note), m.area_rect(menu)));
+    let (Some(note_rect), Some(menu_rect)) = rects else { panic!("both are shown: {rects:?}") };
+    assert!(note_rect.intersects(menu_rect), "the note and the menu overlap, so their order matters");
+    // Layers are listed back to front: the note comes before the menu.
+    let order: Vec<egui::Id> = h.ctx.memory(|m| m.layer_ids().map(|l| l.id).collect());
+    let at = |id| order.iter().position(|x| *x == id);
+    assert!(at(note) < at(menu), "the note is drawn below the menu");
+}
+
+#[test]
 fn a_linked_cell_offers_to_edit_open_and_remove_its_link() {
     // #2120: the menu only offered "Link…", and its dialog was titled Insert Hyperlink.
     use egui_kittest::kittest::Queryable as _;
@@ -132,23 +151,4 @@ fn a_linked_cell_offers_to_edit_open_and_remove_its_link() {
     assert!(!sh.hyperlinks.contains_key(&CellRef::parse("B2").unwrap()));
     quick_right_click(&mut h, "B2");
     assert!(h.query_by_label("Link…").is_some() && h.query_by_label("Edit Hyperlink…").is_none());
-}
-
-#[test]
-fn a_shown_note_stays_below_the_context_menu() {
-    // #3692: a note shown at all times was painted over the menu and hid some of its items.
-    let mut h = harness();
-    h.state_mut().session.execute("review.newNote", serde_json::json!({"cell": "B2", "text": "Always shown"})).unwrap();
-    h.state_mut().session.execute("review.showNote", serde_json::json!({"cell": "B2"})).unwrap();
-    h.run_steps(2);
-    quick_right_click(&mut h, "B2");
-    assert!(h.state().grid.context_menu.is_some(), "the menu is open");
-    let (note, menu) = (egui::Id::unique(("note", 1u32, 1u32)), egui::Id::unique("cell_context"));
-    let rects = h.ctx.memory(|m| (m.area_rect(note), m.area_rect(menu)));
-    let (Some(note_rect), Some(menu_rect)) = rects else { panic!("both are shown: {rects:?}") };
-    assert!(note_rect.intersects(menu_rect), "the note and the menu overlap, so their order matters");
-    // Layers are listed back to front: the note comes before the menu.
-    let order: Vec<egui::Id> = h.ctx.memory(|m| m.layer_ids().map(|l| l.id).collect());
-    let at = |id| order.iter().position(|x| *x == id);
-    assert!(at(note) < at(menu), "the note is drawn below the menu");
 }
