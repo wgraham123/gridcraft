@@ -310,7 +310,7 @@ pub fn write_xlsx_named_with(wb: &Workbook, kind: XlsxKind, book_name: Option<&s
     };
 
     let mut wb_rels = Rels::default();
-    let (sheets_xml, kept, pivots) = write_sheets(wb, &mut out, active, &mut wb_rels);
+    let (sheets_xml, kept, pivots, active_tab) = write_sheets(wb, &mut out, active, &mut wb_rels);
 
     let names = write_defined_names(wb, &kept, &out.chart_names);
 
@@ -336,7 +336,7 @@ pub fn write_xlsx_named_with(wb: &Workbook, kind: XlsxKind, book_name: Option<&s
         let pw = wb.structure_password.as_ref().map(|h| crate::sheet_write::password_attrs(h, "workbook")).unwrap_or_default();
         let _ = write!(w, "<workbookProtection{pw} lockStructure=\"1\"/>");
     }
-    let _ = write!(w, "<bookViews><workbookView activeTab=\"{}\"", kept.file_index(active));
+    let _ = write!(w, "<bookViews><workbookView activeTab=\"{active_tab}\"");
     w.push_str(&workbook_view_attrs(wb));
     let _ = write!(w, "/></bookViews><sheets>{sheets_xml}</sheets>");
     w.push_str(&kept.elements);
@@ -503,21 +503,27 @@ pub fn write_xlsx_named_with(wb: &Workbook, kind: XlsxKind, book_name: Option<&s
     zip.finish()
 }
 
+/// Writes the worksheets and the kept chart sheets in file order. Returns their `<sheet>` entries,
+/// the kept content, the pivot writer and the file position of the active tab.
 fn write_sheets(
     wb: &Workbook,
     out: &mut Out,
     active: usize,
     wb_rels: &mut Rels,
-) -> (String, crate::passthrough::WorkbookKept, crate::pivot::PivotWriter) {
+) -> (String, crate::passthrough::WorkbookKept, crate::pivot::PivotWriter, usize) {
     // Kept content first: the chart sheets among the worksheets need their relationship ids.
     let kept = crate::passthrough::write_workbook(wb, wb_rels, out);
     let mut pivots = crate::pivot::PivotWriter::default();
     let mut sheets_xml = String::new();
     let any_visible = wb.sheets.iter().any(|s| s.visibility == Visibility::Visible);
+    // A workbook needs a visible tab, and its active tab must be visible. With every worksheet
+    // hidden, a visible chart sheet is that tab: the worksheets keep their states (#4673).
+    // Otherwise the active worksheet is shown.
+    let chart_tab = if any_visible { None } else { kept.first_visible(wb.sheets.len()) };
     let mut ids = crate::passthrough::SheetIds::new(wb, &kept);
     for (i, sheet) in wb.sheets.iter().enumerate() {
         sheets_xml.push_str(&kept.sheet_entries(i, false, &mut ids));
-        let (xml, mut rels) = crate::sheet_write::write_sheet(wb, i, i == active, out);
+        let (xml, mut rels) = crate::sheet_write::write_sheet(wb, i, i == active && chart_tab.is_none(), out);
         pivots.add_sheet(wb, i, out, &mut rels);
         let name = format!("xl/worksheets/sheet{}.xml", i + 1);
         out.part(&name, Some(CT_WORKSHEET), xml.into_bytes());
@@ -527,7 +533,7 @@ fn write_sheets(
         let rid = wb_rels.add("worksheet", &format!("worksheets/sheet{}.xml", i + 1));
         let state = match sheet.visibility {
             Visibility::Visible => "",
-            _ if !any_visible && i == active => "",
+            _ if !any_visible && chart_tab.is_none() && i == active => "",
             Visibility::Hidden => " state=\"hidden\"",
             Visibility::VeryHidden => " state=\"veryHidden\"",
         };
@@ -536,8 +542,8 @@ fn write_sheets(
         let _ = write!(sheets_xml, "<sheet name=\"{}\" sheetId=\"{sheet_id}\"{state} r:id=\"{rid}\"/>", esc_attr(&name));
     }
     sheets_xml.push_str(&kept.sheet_entries(wb.sheets.len(), true, &mut ids));
-
-    (sheets_xml, kept, pivots)
+    let active_tab = chart_tab.unwrap_or_else(|| kept.file_index(active));
+    (sheets_xml, kept, pivots, active_tab)
 }
 
 fn write_defined_names(wb: &Workbook, kept: &crate::passthrough::WorkbookKept, chart_names: &[String]) -> String {

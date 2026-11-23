@@ -1029,3 +1029,71 @@ fn a_sheet_of_modelled_controls_keeps_nothing_for_them() {
     assert_eq!(sh.controls.len(), 2);
     assert!(sh.preserved.is_none(), "{:?}", sh.preserved);
 }
+
+/// [`chartsheet_package`] with its workbook part rewritten by `edit`.
+fn chartsheet_package_with(edit: impl Fn(String) -> String) -> Vec<u8> {
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(chartsheet_package())).unwrap();
+    let mut parts: Vec<(String, Vec<u8>)> = Vec::new();
+    for i in 0..z.len() {
+        let mut f = z.by_index(i).unwrap();
+        let mut data = Vec::new();
+        f.read_to_end(&mut data).unwrap();
+        if f.name() == "xl/workbook.xml" {
+            data = edit(String::from_utf8(data).unwrap()).into_bytes();
+        }
+        parts.push((f.name().to_string(), data));
+    }
+    let refs: Vec<(&str, &[u8])> = parts.iter().map(|(n, d)| (n.as_str(), d.as_slice())).collect();
+    make_zip(&refs)
+}
+
+/// The fixture's worksheets all hidden (Data very hidden), so only chart sheets can be shown.
+fn hide_worksheets(x: String) -> String {
+    x.replace(r#"name="Data" sheetId="1""#, r#"name="Data" sheetId="1" state="veryHidden""#)
+        .replace(r#"name="More" sheetId="3""#, r#"name="More" sheetId="3" state="hidden""#)
+        .replace(r#"name="Spare" sheetId="4""#, r#"name="Spare" sheetId="4" state="hidden""#)
+}
+
+/// #4673: with every worksheet hidden and a chart sheet visible, saving keeps the worksheets'
+/// states and makes the visible chart sheet the active tab, instead of showing a worksheet.
+#[test]
+fn a_visible_chart_sheet_is_the_active_tab_when_every_worksheet_is_hidden() {
+    let bytes = chartsheet_package_with(|x| hide_worksheets(x).replace("activeTab=\"2\"", "activeTab=\"1\""));
+    let (wb, _) = read_xlsx(&bytes).unwrap();
+    let u = Unpacked::new(&write_xlsx(&wb).unwrap());
+    u.assert_valid();
+    assert_eq!(
+        written_sheets(&u),
+        [("Data", "veryHidden"), ("Chart1", ""), ("More", "hidden"), ("Spare", "hidden"), ("Last", "hidden")]
+            .map(|(a, b)| (a.to_string(), b.to_string())),
+    );
+    let wbx = u.text("xl/workbook.xml");
+    assert_eq!(attr_of(&wbx, "workbookView", "activeTab"), "1", "the chart sheet is the active tab");
+    for n in 1..=3 {
+        assert!(!u.text(&format!("xl/worksheets/sheet{n}.xml")).contains("tabSelected"), "no hidden worksheet is selected");
+    }
+    // With a worksheet visible, the active worksheet is the tab, as before.
+    let (wb, _) = read_xlsx(&chartsheet_package()).unwrap();
+    let u = Unpacked::new(&write_xlsx(&wb).unwrap());
+    assert_eq!(attr_of(&u.text("xl/workbook.xml"), "workbookView", "activeTab"), "2");
+}
+
+/// A visible chart sheet recorded after the last worksheet stays the last tab when worksheets
+/// were deleted since the file was read, and the active tab points at it, inside the sheet list.
+#[test]
+fn the_active_chart_sheet_tab_counts_deleted_worksheets() {
+    let bytes = chartsheet_package_with(|x| {
+        hide_worksheets(x)
+            .replace(r#"name="Chart1" sheetId="2""#, r#"name="Chart1" sheetId="2" state="hidden""#)
+            .replace(r#"name="Last" sheetId="9" state="hidden""#, r#"name="Last" sheetId="9""#)
+    });
+    let (mut wb, _) = read_xlsx(&bytes).unwrap();
+    // Spare (no chart refers to it) is deleted: Last was recorded after three worksheets, now two.
+    let spare = wb.sheets.iter().position(|s| s.name == "Spare").unwrap();
+    wb.sheets.remove(spare);
+    let u = Unpacked::new(&write_xlsx(&wb).unwrap());
+    u.assert_valid();
+    let sheets = written_sheets(&u);
+    assert_eq!(sheets.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(), ["Data", "Chart1", "More", "Last"]);
+    assert_eq!(attr_of(&u.text("xl/workbook.xml"), "workbookView", "activeTab"), "3", "Last, the only visible tab");
+}
