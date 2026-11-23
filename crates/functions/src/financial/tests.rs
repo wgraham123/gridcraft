@@ -418,3 +418,65 @@ fn accrintm_equal_dates_accrue_zero() {
         close(crate::call(crate::lookup("ACCRINTM").unwrap(), &args, &mut ctx), 0.0);
     }
 }
+
+/// The functions taken over from the Analysis ToolPak reject TRUE and FALSE, typed or read from
+/// a cell, where other functions read 1 or 0 (#4067); ACCRINT's calc_method stays a logical flag.
+#[test]
+fn analysis_toolpak_functions_reject_logicals() {
+    let (s, m, i, f) = (d(2023, 2, 1), d(2025, 7, 1), d(2022, 1, 1), d(2023, 7, 1));
+    let x = || n(f64::NAN); // replaced by the logical under test
+    let cases: Vec<(&str, Vec<Arg>, usize)> = vec![
+        ("ACCRINT", vec![i.clone(), f.clone(), s.clone(), n(0.05), n(1000.0), x(), n(0.0), b(true)], 5),
+        ("ACCRINTM", vec![x(), m.clone(), n(0.05), n(1000.0), n(0.0)], 0),
+        ("AMORDEGRC", vec![n(1000.0), d(2023, 1, 1), f.clone(), x(), n(1.0), n(0.2), n(0.0)], 3),
+        ("AMORLINC", vec![n(1000.0), x(), f.clone(), n(100.0), n(1.0), n(0.2), n(0.0)], 1),
+        ("COUPDAYBS", vec![s.clone(), m.clone(), x(), n(0.0)], 2),
+        ("COUPDAYS", vec![s.clone(), m.clone(), x(), n(0.0)], 2),
+        ("COUPDAYSNC", vec![s.clone(), m.clone(), x(), n(0.0)], 2),
+        ("COUPNCD", vec![s.clone(), m.clone(), x(), n(0.0)], 2),
+        ("COUPNUM", vec![s.clone(), m.clone(), x(), n(0.0)], 2),
+        ("COUPPCD", vec![s.clone(), m.clone(), x(), n(0.0)], 2),
+        ("DISC", vec![x(), d(2025, 6, 30), n(95.0), n(100.0), n(0.0)], 0),
+        ("DOLLARDE", vec![n(1.125), x()], 1),
+        ("DOLLARFR", vec![n(1.125), x()], 1),
+        ("DURATION", vec![s.clone(), m.clone(), n(0.05), n(0.04), x(), n(0.0)], 4),
+        ("EFFECT", vec![n(0.05), x()], 1),
+        ("INTRATE", vec![x(), m.clone(), n(95.0), n(100.0), n(0.0)], 0),
+        ("MDURATION", vec![s.clone(), m.clone(), n(0.05), n(0.04), x(), n(0.0)], 4),
+        ("NOMINAL", vec![n(0.05), x()], 1),
+        ("ODDFPRICE", vec![s.clone(), m.clone(), i.clone(), f.clone(), n(0.05), n(0.04), n(100.0), x(), n(0.0)], 7),
+        ("ODDFYIELD", vec![s.clone(), m.clone(), i.clone(), f.clone(), x(), n(100.0), n(100.0), n(2.0), n(0.0)], 4),
+        ("ODDLPRICE", vec![s.clone(), d(2023, 4, 1), d(2023, 1, 1), n(0.05), n(0.04), n(100.0), x(), n(0.0)], 6),
+        ("ODDLYIELD", vec![s.clone(), d(2023, 4, 1), d(2023, 1, 1), n(0.05), n(100.0), n(100.0), x(), n(0.0)], 6),
+        ("PRICE", vec![s.clone(), m.clone(), n(0.05), n(0.04), n(100.0), x(), n(0.0)], 5),
+        ("PRICEDISC", vec![x(), m.clone(), n(0.05), n(100.0), n(0.0)], 0),
+        ("PRICEMAT", vec![d(2024, 1, 15), d(2025, 6, 30), x(), n(0.05), n(0.04), n(0.0)], 2),
+        ("RECEIVED", vec![s.clone(), m.clone(), x(), n(0.05), n(0.0)], 2),
+        ("YEARFRAC", vec![x(), d(2025, 6, 30), n(0.0)], 0),
+        ("YIELD", vec![s.clone(), m.clone(), n(0.05), n(100.0), n(100.0), x(), n(0.0)], 5),
+        ("YIELDDISC", vec![x(), m.clone(), n(95.0), n(100.0), n(0.0)], 0),
+        ("YIELDMAT", vec![d(2024, 1, 15), d(2025, 6, 30), x(), n(0.05), n(100.0), n(0.0)], 2),
+    ];
+    for (name, args, at) in cases {
+        let with = |v: Arg| {
+            let mut a = args.clone();
+            a[at] = v;
+            ev(name, a)
+        };
+        // A number in the same place gives a result: the logical is what is refused.
+        assert!(!matches!(with(n(1.0)), Value::Error(CellError::Value)), "{name} with 1");
+        for logical in [b(true), b(false), rf(Value::Bool(true)), rf(Value::Bool(false))] {
+            is_err(with(logical), CellError::Value);
+        }
+        // An error to the left of the logical is still the result.
+        let mut a = args.clone();
+        a[at] = b(true);
+        if at > 0 {
+            a[0] = e(CellError::NA);
+            is_err(ev(name, a), CellError::NA);
+        }
+    }
+    let accrint = |flag: Arg| ev("ACCRINT", vec![d(2008, 3, 5), d(2008, 8, 31), d(2008, 5, 1), n(0.1), n(1000.0), n(2.0), n(0.0), flag]);
+    assert_eq!(accrint(b(false)), accrint(n(0.0)));
+    assert_eq!(accrint(rf(Value::Bool(true))), accrint(n(1.0)));
+}

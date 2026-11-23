@@ -4,7 +4,7 @@ use gridcraft_core::date::{DateTime, datetime_from_serial, days_in_month, is_lea
 use gridcraft_core::parse::parse_input;
 use gridcraft_core::{CellError, DateSystem, Value};
 
-use crate::util::{R, S, arg, as_array, has, num, num_val, opt_bool, opt_num, scalar, text, to_int};
+use crate::util::{R, S, arg, as_array, has, no_logicals, num, num_val, opt_bool, opt_num, scalar, text, to_int};
 use crate::{Arg, Ctx, FnSpec};
 
 const MAX_SERIAL: f64 = 2_958_465.0;
@@ -588,7 +588,7 @@ pub(crate) fn specs() -> Vec<FnSpec> {
             S,
             "YEARFRAC(start_date, end_date, [basis])",
             "Returns the fraction of a year between two dates under a day-count basis.",
-            yearfrac
+            |a: &[Arg], c: &mut dyn Ctx| no_logicals(a, &[]).and_then(|()| yearfrac(a, c))
         ),
     ]
 }
