@@ -753,7 +753,9 @@ pub(crate) fn paint_overlays(input: OverlayInput<'_>) {
         let at = pos2(r.right() + 10.0, r.top());
         p.line_segment([r.right_top(), at + vec2(0.0, 6.0)], Stroke::new(1.0, Color32::from_gray(90)));
         let (at, pivot) = (geo.mirror_pos(at), if geo.rtl { Align2::RIGHT_TOP } else { Align2::LEFT_TOP });
-        egui::Area::new(egui::Id::unique(("note", c.row, c.col))).fixed_pos(at).pivot(pivot).order(egui::Order::Tooltip).interactable(false).show(
+        // Above the sheet but below the menus and lists that open over it (#3692): a note shown
+        // at all times must not hide the items of the cell's context menu.
+        egui::Area::new(egui::Id::unique(("note", c.row, c.col))).fixed_pos(at).pivot(pivot).order(egui::Order::Middle).interactable(false).show(
             ui.ctx(),
             |ui| {
                 egui::Frame::popup(ui.style()).fill(if cm.threaded { Color32::WHITE } else { Color32::from_rgb(0xFF, 0xFF, 0xE1) }).show(ui, |ui| {
