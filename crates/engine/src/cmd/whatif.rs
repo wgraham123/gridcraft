@@ -371,10 +371,11 @@ fn data_table(s: &mut Session, p: &Json) -> Result<Json> {
     if body.count() > MAX_TABLE_CELLS {
         return Err(bad(CMD, format!("the table body is too large ({MAX_TABLE_CELLS} cells max)")));
     }
-    for input in [row_in, col_in].into_iter().flatten() {
-        if input.0 == si && r.contains(input.1) {
-            return Err(EngineError::Other("Input cell reference is not valid.".into()));
-        }
+    // An input inside the table is refused, as is one cell given as both the row and the column
+    // input (the column values would overwrite the row values), as in Excel.
+    let same_cell = row_in.is_some() && row_in == col_in;
+    if same_cell || [row_in, col_in].into_iter().flatten().any(|(isi, ic)| isi == si && r.contains(ic)) {
+        return Err(EngineError::Other("Input cell reference is not valid.".into()));
     }
     let d = s.doc()?;
     let sh = d.wb.sheet(si).ok_or(EngineError::NoDocument)?;
