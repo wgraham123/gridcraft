@@ -729,6 +729,19 @@ fn t_chi_f() {
     is_err(ev("F.DIST", vec![n(1.0), n(0.0), n(4.0), b(true)]), CellError::Num);
 }
 
+/// #4018: CHISQ.INV and GAMMA.INV keep their precision near probability 1. Two degrees of
+/// freedom and a shape of 1 have closed forms to check against: -2 ln(1 - p) and -beta ln(1 - p).
+#[test]
+fn chi_square_and_gamma_inverses_keep_precision_near_one() {
+    for p in [0.6_f64, 0.9, 0.99, 0.999_999, 1.0 - 1e-12, 0.999_999_999_999_999] {
+        let tail = -(1.0 - p).ln();
+        close_tol(ev("CHISQ.INV", vec![n(p), n(2.0)]), 2.0 * tail, 1e-13);
+        close_tol(ev("GAMMA.INV", vec![n(p), n(1.0), n(3.0)]), 3.0 * tail, 1e-13);
+    }
+    // The issue's Gamma(2, 3) case, against Excel.
+    close_tol(ev("GAMMA.INV", vec![n(0.999_999_999_999_999), n(2.0), n(3.0)]), 114.625_406_266_454_46, 1e-13);
+}
+
 #[test]
 fn f_distributions_accept_ten_billion_degrees() {
     close_tol(ev("F.DIST", vec![n(0.0), n(10_000_000_000.0), n(1.0), b(false)]), 0.0, 0.0);
