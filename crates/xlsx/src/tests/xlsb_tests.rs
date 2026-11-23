@@ -720,3 +720,53 @@ fn xlsb_external_link_ordinals_preserve_missing_slots_on_xlsx_save() {
         "{link_rels}"
     );
 }
+
+/// #4669: an array formula's other cells hold its saved results as plain values in an XLSB; they
+/// import empty, as in an .xlsx, so the formula fills them again instead of meeting them as
+/// blocking data. A value outside the range is kept.
+#[test]
+fn xlsb_array_formula_results_give_way_to_the_formula() {
+    // B1:B2 = {=$A$1:$A$2*2}: each cell is a PtgExp to B1; BrtArrFmla (426) follows B1.
+    let exp = |cached: f64| {
+        let mut data = 1u32.to_le_bytes().to_vec();
+        data.extend([0; 4]);
+        data.extend(cached.to_le_bytes());
+        data.extend([0; 2]);
+        data.extend(5u32.to_le_bytes());
+        data.push(0x01);
+        data.extend(0u32.to_le_bytes()); // first row
+        data.extend(4u32.to_le_bytes());
+        data.extend(1u32.to_le_bytes()); // first column, in PtgExtraCol
+        record(9, &data)
+    };
+    let mut rgce = vec![0x25]; // PtgArea $A$1:$A$2
+    rgce.extend(0u32.to_le_bytes());
+    rgce.extend(1u32.to_le_bytes());
+    rgce.extend(0u16.to_le_bytes());
+    rgce.extend(0u16.to_le_bytes());
+    rgce.extend([0x1E, 2, 0, 0x05]); // PtgInt 2, PtgMul
+    let mut arr = vec![];
+    for n in [0u32, 1, 1, 1] {
+        arr.extend(n.to_le_bytes()); // rows 0..=1, columns 1..=1
+    }
+    arr.push(0);
+    arr.extend((rgce.len() as u32).to_le_bytes());
+    arr.extend(&rgce);
+    arr.extend(0u32.to_le_bytes());
+    let mut data = row(0);
+    data.extend(cell(5, 0, &2f64.to_le_bytes()));
+    data.extend(exp(4.0));
+    data.extend(record(426, &arr));
+    data.extend(row(1));
+    data.extend(cell(5, 0, &3f64.to_le_bytes()));
+    data.extend(exp(6.0));
+    data.extend(row(2));
+    data.extend(cell(5, 1, &7f64.to_le_bytes()));
+    let (wb, _) = read_xlsb(&file(&worksheet(&data, &[]))).unwrap();
+    let sh = &wb.sheets[0];
+    let anchor = sh.cell(CellRef::new(0, 1)).and_then(|c| c.formula.as_ref()).expect("the array formula");
+    assert_eq!(anchor.array, Some(RangeRef::new(CellRef::new(0, 1), CellRef::new(1, 1))));
+    assert!(sh.cell(CellRef::new(1, 1)).is_none(), "the saved result in B2 gives way to the formula");
+    assert_eq!(sh.value(CellRef::new(2, 1)), Value::Number(7.0), "a value below the range is kept");
+    assert_eq!(sh.value(CellRef::new(1, 0)), Value::Number(3.0));
+}

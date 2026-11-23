@@ -157,15 +157,15 @@ const SHARED_FORMULA_FREE_COST: u64 = 4096;
 pub const MAX_SHARED_FORMULA_BYTES: u64 = 256 << 20;
 const MAX_COLUMN_ASSIGNMENTS: u64 = 1_000_000;
 /// Most dynamic-array and legacy-array ranges of one sheet.
-const MAX_DYNAMIC_RANGES: usize = 65_536;
+pub(crate) const MAX_DYNAMIC_RANGES: usize = 65_536;
 /// Worst-case cells inside the dynamic ranges the sheet declares. Beyond it further ranges are
 /// dropped: they would cost their storage in every membership lookup that follows.
-const MAX_DYNAMIC_CELLS: u64 = 16_000_000;
+pub(crate) const MAX_DYNAMIC_CELLS: u64 = 16_000_000;
 /// Most row-membership checks the sheet's ranges may serve. Beyond it the remaining cells are
 /// imported with their cached values instead of being blanked for a spill that may still come,
 /// so adversarial range counts can't make each cell scan a long list (a real workbook has a
 /// handful of ranges).
-const MAX_DYNAMIC_CHECKS: u64 = 16_000_000;
+pub(crate) const MAX_DYNAMIC_CHECKS: u64 = 16_000_000;
 /// Most conditional-format range cells one sheet keeps, over all rules of an element: every
 /// rule copies its element's whole range list, so rules × ranges must stay bounded.
 const MAX_COND_CELLS: u64 = 4_000_000;
