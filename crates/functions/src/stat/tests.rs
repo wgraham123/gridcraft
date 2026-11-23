@@ -364,19 +364,6 @@ fn percentiles() {
     close(ev("PERCENTRANK.EXC", vec![k, n(2.123_456_789), n(16.0)]), 0.265_432_098_625);
 }
 
-/// #4023: T.INV.2T and T.INV keep their precision where the quantile is near 0. One and two
-/// degrees of freedom have closed forms: tan(pi (1 - p) / 2) and sqrt(2) (1 - p) / sqrt(p (2 - p)).
-#[test]
-fn t_inverses_keep_precision_near_the_centre() {
-    for p in [0.51_f64, 0.6, 0.9, 0.99, 1.0 - 1e-9, 0.999_999_999_999, 0.999_999_999_999_999] {
-        let two = std::f64::consts::SQRT_2 * (1.0 - p) / (p * (2.0 - p)).sqrt();
-        close_tol(ev("T.INV.2T", vec![n(p), n(2.0)]), two, 1e-13);
-        close_tol(ev("T.INV.2T", vec![n(p), n(1.0)]), (std::f64::consts::FRAC_PI_2 * (1.0 - p)).tan(), 1e-13);
-        // T.INV at the matching one-tailed probability is the same quantile.
-        close_tol(ev("T.INV", vec![n(1.0 - p / 2.0), n(2.0)]), two, 1e-12);
-    }
-}
-
 #[test]
 fn pairs_and_regression() {
     close_tol(ev("CORREL", vec![c(&[3.0, 2.0, 4.0, 5.0, 6.0]), c(&[9.0, 7.0, 12.0, 15.0, 17.0])]), 0.997054486, 1e-9);
@@ -771,6 +758,19 @@ fn t_density_is_stable_for_large_degrees() {
     close_tol(ev("T.DIST", vec![n(0.0), n(100_000_000.0), b(false)]), 0.398942279404077, 1e-12);
     close_tol(ev("T.DIST", vec![n(0.0), n(10_000_000_000.0), b(false)]), 0.3989422803914591, 1e-12);
     close_tol(ev("T.DIST", vec![n(1.0), n(10_000_000_000_000_000.0), b(false)]), 0.24197072451914337, 1e-12);
+}
+
+/// #4023: T.INV.2T and T.INV keep their precision where the quantile is near 0. One and two
+/// degrees of freedom have closed forms: tan(pi (1 - p) / 2) and sqrt(2) (1 - p) / sqrt(p (2 - p)).
+#[test]
+fn t_inverses_keep_precision_near_the_centre() {
+    for p in [0.51_f64, 0.6, 0.9, 0.99, 1.0 - 1e-9, 0.999_999_999_999, 0.999_999_999_999_999] {
+        let two = std::f64::consts::SQRT_2 * (1.0 - p) / (p * (2.0 - p)).sqrt();
+        close_tol(ev("T.INV.2T", vec![n(p), n(2.0)]), two, 1e-13);
+        close_tol(ev("T.INV.2T", vec![n(p), n(1.0)]), (std::f64::consts::FRAC_PI_2 * (1.0 - p)).tan(), 1e-13);
+        // T.INV at the matching one-tailed probability is the same quantile.
+        close_tol(ev("T.INV", vec![n(1.0 - p / 2.0), n(2.0)]), two, 1e-12);
+    }
 }
 
 #[test]
