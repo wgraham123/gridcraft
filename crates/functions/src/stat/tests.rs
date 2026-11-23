@@ -364,21 +364,6 @@ fn percentiles() {
     close(ev("PERCENTRANK.EXC", vec![k, n(2.123_456_789), n(16.0)]), 0.265_432_098_625);
 }
 
-/// #4022: the inverse normal keeps its precision near probability 1, where the upper tail is
-/// the mirror image of the lower one. Expected values from Wichura's AS241 (the algorithm of
-/// Python's `statistics.NormalDist.inv_cdf`), which Excel matches here.
-#[test]
-fn normal_inverses_keep_precision_near_one() {
-    let p = 0.999_999_999_999_999;
-    close_tol(ev("NORM.S.INV", vec![n(p)]), 7.941_444_487_415_977, 1e-13);
-    close_tol(ev("NORM.INV", vec![n(p), n(0.0), n(1.0)]), 7.941_444_487_415_977, 1e-13);
-    close_tol(ev("LOGNORM.INV", vec![n(p), n(0.0), n(1.0)]), 2_811.418_635_478_142_7, 1e-12);
-    for p in [0.6, 0.9, 0.99, 0.999_999, 1.0 - 1e-12] {
-        let (Value::Number(hi), Value::Number(lo)) = (ev("NORM.S.INV", vec![n(p)]), ev("NORM.S.INV", vec![n(1.0 - p)])) else { panic!("{p}") };
-        assert_eq!(hi, -lo, "symmetric at {p}");
-    }
-}
-
 #[test]
 fn pairs_and_regression() {
     close_tol(ev("CORREL", vec![c(&[3.0, 2.0, 4.0, 5.0, 6.0]), c(&[9.0, 7.0, 12.0, 15.0, 17.0])]), 0.997054486, 1e-9);
@@ -694,6 +679,21 @@ fn normal() {
     close_tol(ev("LOGNORMDIST", vec![n(4.0), n(3.5), n(1.2)]), 0.0390836, D7);
     close_tol(ev("LOGNORM.INV", vec![n(0.039084), n(3.5), n(1.2)]), 4.0000252, D7);
     close_tol(ev("LOGINV", vec![n(0.039084), n(3.5), n(1.2)]), 4.0000252, D7);
+}
+
+/// #4022: the inverse normal keeps its precision near probability 1, where the upper tail is
+/// the mirror image of the lower one. Expected values from Wichura's AS241 (the algorithm of
+/// Python's `statistics.NormalDist.inv_cdf`), which Excel matches here.
+#[test]
+fn normal_inverses_keep_precision_near_one() {
+    let p = 0.999_999_999_999_999;
+    close_tol(ev("NORM.S.INV", vec![n(p)]), 7.941_444_487_415_977, 1e-13);
+    close_tol(ev("NORM.INV", vec![n(p), n(0.0), n(1.0)]), 7.941_444_487_415_977, 1e-13);
+    close_tol(ev("LOGNORM.INV", vec![n(p), n(0.0), n(1.0)]), 2_811.418_635_478_142_7, 1e-12);
+    for p in [0.6, 0.9, 0.99, 0.999_999, 1.0 - 1e-12] {
+        let (Value::Number(hi), Value::Number(lo)) = (ev("NORM.S.INV", vec![n(p)]), ev("NORM.S.INV", vec![n(1.0 - p)])) else { panic!("{p}") };
+        assert_eq!(hi, -lo, "symmetric at {p}");
+    }
 }
 
 #[test]
