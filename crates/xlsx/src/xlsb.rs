@@ -60,6 +60,38 @@ fn map_visibility(visibility: craft_xlsx::Visibility) -> Visibility {
     }
 }
 
+/// The array formulas' ranges of the sheet being read. The file keeps the saved results of an
+/// array formula's other cells as plain values; as in an `.xlsx`, they are left empty for the
+/// formula to fill again, or they would block it with `#SPILL!` (#4669). An array's first cell is
+/// its top-left one, read before the rest. Bounded like the `.xlsx` reader's ranges: past the
+/// caps, cells keep their saved values rather than scanning a hostile number of ranges.
+#[derive(Default)]
+struct ArrayRanges {
+    ranges: Vec<RangeRef>,
+    cells: u64,
+    checks: u64,
+}
+
+impl ArrayRanges {
+    fn add(&mut self, range: RangeRef) {
+        let cells = range.count();
+        if self.ranges.len() >= crate::sheet_read::MAX_DYNAMIC_RANGES || self.cells.saturating_add(cells) > crate::sheet_read::MAX_DYNAMIC_CELLS {
+            return;
+        }
+        self.cells = self.cells.saturating_add(cells);
+        self.ranges.push(range);
+    }
+
+    /// Whether `at` is in an array range other than as its first cell.
+    fn covers(&mut self, at: CellRef) -> bool {
+        if self.ranges.is_empty() || self.checks > crate::sheet_read::MAX_DYNAMIC_CHECKS {
+            return false;
+        }
+        self.checks = self.checks.saturating_add(self.ranges.len() as u64);
+        self.ranges.iter().any(|r| r.contains(at) && r.start != at)
+    }
+}
+
 pub(super) fn import_limits() -> craft_xlsx::Limits {
     let limits = craft_xlsx::Limits::default();
     // Keep the lower decoded-text budget in the browser's WebAssembly heap.
@@ -172,16 +204,21 @@ pub fn read_xlsb(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
         }
         let mut sheet = Sheet::new(&entry.name);
         sheet.visibility = map_visibility(entry.visibility);
+        let mut arrays = ArrayRanges::default();
         let part = package
             .sheet(entry, |row| {
                 for cell in row.cells {
                     let value = map_value(cell.value.resolve(&strings, book.date_1904));
                     let formula = cell.formula.as_ref().and_then(|f| map_formula(f, cell.at, &mut report));
+                    let at = CellRef::new(cell.at.row, cell.at.col);
+                    if let Some(range) = formula.as_ref().and_then(|f| f.array) {
+                        arrays.add(range);
+                    } else if formula.is_none() && arrays.covers(at) {
+                        // An array formula's other cell: its saved value gives way to the formula.
+                        continue;
+                    }
                     if !value.is_empty() || formula.is_some() {
-                        sheet.cells.set(
-                            CellRef::new(cell.at.row, cell.at.col),
-                            Cell { value, formula: formula.map(Arc::new), style: StyleId::DEFAULT, py: None },
-                        );
+                        sheet.cells.set(at, Cell { value, formula: formula.map(Arc::new), style: StyleId::DEFAULT, py: None });
                     }
                 }
                 Ok(())
