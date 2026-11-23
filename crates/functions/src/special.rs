@@ -72,9 +72,50 @@ pub(crate) fn gamma(x: f64) -> f64 {
     ln_gamma(x).exp()
 }
 
-/// ln B(a, b).
+/// The Stirling-series remainder δ(z) = ln Γ(z) − ((z − ½) ln z − z + ½ ln 2π), for z ≥ 10, where
+/// eight terms leave an error below 1e-17.
+fn stirling_remainder(z: f64) -> f64 {
+    // B₂ₙ / (2n (2n − 1)) for n = 1..8.
+    const C: [f64; 8] = [1.0 / 12.0, -1.0 / 360.0, 1.0 / 1260.0, -1.0 / 1680.0, 1.0 / 1188.0, -691.0 / 360_360.0, 1.0 / 156.0, -3617.0 / 122_400.0];
+    let r = 1.0 / z;
+    let r2 = r * r;
+    C.iter().rev().fold(0.0, |s, c| s * r2 + c) * r
+}
+
+/// ln Γ(b) − ln Γ(a + b) for b ≥ 10. Taken as the difference of two log-gammas it would lose
+/// about b·ln b·ε to cancellation (five digits at b = 5e9); through Stirling's series it is
+/// −a ln(a + b) − (b − ½) ln(1 + a/b) + a + δ(b) − δ(a + b), with no large terms cancelling.
+fn ln_gamma_ratio(a: f64, b: f64) -> f64 {
+    let ab = a + b;
+    -a * ab.ln() - (b - 0.5) * (a / b).ln_1p() + a + stirling_remainder(b) - stirling_remainder(ab)
+}
+
+/// ln B(a, b). With one parameter large, the two large log-gammas are taken as one ratio, so the
+/// t, F and beta distributions keep their digits at large degrees of freedom.
 pub(crate) fn ln_beta(a: f64, b: f64) -> f64 {
+    let (small, large) = if a <= b { (a, b) } else { (b, a) };
+    if large >= 10.0 && small > 0.0 && large.is_finite() {
+        return ln_gamma(small) + ln_gamma_ratio(small, large);
+    }
     ln_gamma(a) + ln_gamma(b) - ln_gamma(a + b)
+}
+
+/// ln(1 + d) − d, accurate where the two terms nearly cancel (small d).
+fn ln_1p_minus(d: f64) -> f64 {
+    if d.abs() >= 0.25 {
+        return d.ln_1p() - d;
+    }
+    // −d²/2 + d³/3 − d⁴/4 + …
+    let (mut power, mut sum) = (d, 0.0);
+    for k in 2..80 {
+        power *= -d;
+        let term = power / k as f64;
+        sum += term;
+        if term.abs() <= 1e-17 * sum.abs() {
+            break;
+        }
+    }
+    sum
 }
 
 /// Regularised lower incomplete gamma P(a, x).
@@ -93,7 +134,7 @@ pub(crate) fn reg_gamma_p(a: f64, x: f64) -> f64 {
 
 /// Regularised upper incomplete gamma Q(a, x) = 1 − P(a, x).
 pub(crate) fn reg_gamma_q(a: f64, x: f64) -> f64 {
-    let front = if a > 0.0 && x > 0.0 && x.is_finite() { (-x + a * x.ln() - ln_gamma(a)).exp() } else { 0.0 };
+    let front = if a > 0.0 && x > 0.0 && x.is_finite() { front_of(a, x) } else { 0.0 };
     reg_gamma_q_front(a, x, front)
 }
 
@@ -111,8 +152,14 @@ pub(crate) fn reg_gamma_q_front(a: f64, x: f64, front: f64) -> f64 {
     if x < a + 1.0 { 1.0 - gamma_series(a, x, front) } else { gamma_cf(a, x, front) }
 }
 
-/// `e^-x x^a / Γ(a)`.
+/// `e^-x x^a / Γ(a)`. For a ≥ 10 the large terms of −x + a ln x − ln Γ(a) are cancelled exactly
+/// through Stirling's series: a (ln(1 + d) − d) + ½ ln(a / 2π) − δ(a), with d = (x − a) / a, so
+/// CHISQ, GAMMA and POISSON keep their digits at large degrees of freedom or means.
 fn front_of(a: f64, x: f64) -> f64 {
+    if a >= 10.0 && a.is_finite() {
+        let d = (x - a) / a;
+        return (a * ln_1p_minus(d) + 0.5 * (a / (2.0 * PI)).ln() - stirling_remainder(a)).exp();
+    }
     (-x + a * x.ln() - ln_gamma(a)).exp()
 }
 
@@ -199,10 +246,26 @@ pub(crate) fn erfc(x: f64) -> f64 {
 /// Regularised incomplete beta I_x(a, b).
 pub(crate) fn reg_inc_beta(x: f64, a: f64, b: f64) -> f64 {
     if x > 0.0 && x < 1.0 && a > 0.0 && b > 0.0 {
-        let ln_bt = -ln_beta(a, b) + a * x.ln() + b * (1.0 - x).ln();
+        let ln_bt = -ln_beta(a, b) + a * x.ln() + b * (-x).ln_1p();
         return reg_inc_beta_front(x, a, b, ln_bt.exp());
     }
     reg_inc_beta_front(x, a, b, 0.0)
+}
+
+/// 1 − I_x(a, b), computed on its own rather than subtracted from 1, so it keeps its digits both
+/// where it is tiny and where x is so small that 1 − x (the argument of I_(1−x)(b, a)) would round.
+pub(crate) fn reg_inc_beta_complement(x: f64, a: f64, b: f64) -> f64 {
+    if a.is_nan() || a <= 0.0 || b.is_nan() || b <= 0.0 || !(0.0..=1.0).contains(&x) {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return 1.0;
+    }
+    if x == 1.0 {
+        return 0.0;
+    }
+    let bt = (-ln_beta(a, b) + a * x.ln() + b * (-x).ln_1p()).exp();
+    if x < (a + 1.0) / (a + b + 2.0) { 1.0 - bt * beta_cf(a, b, x) / a } else { bt * beta_cf(b, a, 1.0 - x) / b }
 }
 
 /// I_x(a, b) given the prefactor `bt = x^a (1-x)^b / B(a, b)` (symmetric in the two sides). A

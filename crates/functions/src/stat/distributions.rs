@@ -1,7 +1,7 @@
 use super::descriptive::{arg_nums, arg_pairs, mean, var_s};
 use super::{
     Arg, C, CellError, R, Value, arg, as_array, boolean, erf, gamma, has, invert, ln_beta, ln_gamma, norm_cdf, norm_inv, norm_pdf, num, num_val,
-    reg_gamma_p, reg_gamma_q, reg_gamma_q_front, reg_inc_beta, reg_inc_beta_front,
+    reg_gamma_p, reg_gamma_q, reg_gamma_q_front, reg_inc_beta, reg_inc_beta_complement, reg_inc_beta_front,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -13,8 +13,11 @@ fn ln_comb(n: f64, k: f64) -> f64 {
 }
 
 fn t_upper(t: f64, v: f64) -> f64 {
-    // P(T > t) for t ≥ 0.
-    0.5 * reg_inc_beta(v / (v + t * t), v / 2.0, 0.5)
+    // P(T > t) for t ≥ 0: ½ I_(v/(v+t²))(v/2, ½), or ½ (1 − I_(t²/(v+t²))(½, v/2)) on the side where
+    // the beta argument is small. With many degrees of freedom v/(v+t²) is within a few ulps of 1,
+    // and rounding it alone would cost digits.
+    let small = t * t / (v + t * t);
+    if small < 0.5 { 0.5 * reg_inc_beta_complement(small, 0.5, v / 2.0) } else { 0.5 * reg_inc_beta(v / (v + t * t), v / 2.0, 0.5) }
 }
 
 fn t_cdf(t: f64, v: f64) -> f64 {
