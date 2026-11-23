@@ -101,6 +101,42 @@ fn a_quick_right_click_between_pixels_keeps_the_menu_open_on_retina() {
     assert!(h.state().grid.context_menu.is_some(), "the menu stays open");
 }
 
+/// Whether the area `below` is drawn under the cell context menu where the two overlap.
+fn under_the_menu(h: &Harness, below: egui::Id) {
+    assert!(h.state().grid.context_menu.is_some(), "the menu is open");
+    let menu = egui::Id::unique("cell_context");
+    let rects = h.ctx.memory(|m| (m.area_rect(below), m.area_rect(menu)));
+    let (Some(below_rect), Some(menu_rect)) = rects else { panic!("both are shown: {rects:?}") };
+    assert!(below_rect.intersects(menu_rect), "they overlap, so their order matters");
+    // Layers are listed back to front.
+    let order: Vec<egui::Id> = h.ctx.memory(|m| m.layer_ids().map(|l| l.id).collect());
+    let at = |id| order.iter().position(|x| *x == id);
+    assert!(at(below) < at(menu), "drawn below the menu");
+}
+
+#[test]
+fn a_shown_note_stays_below_the_context_menu() {
+    // #3692: a note shown at all times was painted over the menu and hid some of its items.
+    let mut h = harness();
+    h.state_mut().session.execute("review.newNote", serde_json::json!({"cell": "B2", "text": "Always shown"})).unwrap();
+    h.state_mut().session.execute("review.showNote", serde_json::json!({"cell": "B2"})).unwrap();
+    h.run_steps(2);
+    quick_right_click(&mut h, "B2");
+    under_the_menu(&h, egui::Id::unique(("note", 1u32, 1u32)));
+}
+
+#[test]
+fn a_validation_input_message_stays_below_the_context_menu() {
+    // The active cell's input message was painted over the menu the same way.
+    let mut h = harness();
+    let rule = serde_json::json!({"range": "B2", "type": "whole", "operator": "greater", "formula1": "0",
+        "inputTitle": "Quantity", "inputMessage": "A whole number of boxes, more than zero, for this order line."});
+    h.state_mut().session.execute("data.validation", rule).unwrap();
+    h.run_steps(2);
+    quick_right_click(&mut h, "B2");
+    under_the_menu(&h, egui::Id::unique("dv_input"));
+}
+
 #[test]
 fn a_linked_cell_offers_to_edit_open_and_remove_its_link() {
     // #2120: the menu only offered "Link…", and its dialog was titled Insert Hyperlink.
