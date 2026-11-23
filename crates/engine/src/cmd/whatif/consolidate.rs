@@ -134,7 +134,10 @@ pub(super) fn consolidate(s: &mut Session, p: &Json) -> Result<Json> {
         if r0 > r.end.row || c0 > r.end.col {
             continue;
         }
-        let label = |c: CellRef| crate::display::cell_text(&d.wb, sh, c).trim().to_string();
+        // A label is matched as it reads, spaces included (case is ignored): " Alpha" and
+        // "Alpha" are two categories, and a label of spaces is still a label, as in Excel. Only a
+        // cell with no text has no label.
+        let label = |c: CellRef| crate::display::cell_text(&d.wb, sh, c);
         // Column keys of this source.
         let mut cols: Vec<(u32, usize)> = Vec::new();
         for col in c0..=r.end.col {

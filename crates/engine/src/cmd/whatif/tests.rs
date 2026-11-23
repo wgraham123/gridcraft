@@ -298,6 +298,29 @@ fn consolidate_by_position_and_label() {
     assert!(s.execute("data.consolidate", json!({"sources": ["A1"], "function": "median"})).is_err());
 }
 
+/// #3928: labels keep their spaces when categories are matched. " Alpha", "Alpha " and a label
+/// of spaces are categories of their own; "ALPHA" joins "Alpha"; a blank cell has no label.
+#[test]
+fn consolidate_matches_labels_with_their_spaces() {
+    for (second, rows) in [
+        (json!(" Alpha"), vec![("Alpha", 10.0), (" Alpha", 20.0)]),
+        (json!("Alpha "), vec![("Alpha", 10.0), ("Alpha ", 20.0)]),
+        (json!("   "), vec![("Alpha", 10.0), ("   ", 20.0)]),
+        (json!("\u{a0}"), vec![("Alpha", 10.0), ("\u{a0}", 20.0)]),
+        (json!("ALPHA"), vec![("Alpha", 30.0)]),
+        (json!(null), vec![("Alpha", 10.0)]),
+    ] {
+        let mut s = s();
+        s.execute("range.setValues", json!({"range": "A3", "values": [["Alpha", 10], [second.clone(), 20]], "parse": false})).unwrap();
+        s.execute("data.consolidate", json!({"sources": ["A3:B3", "A4:B4"], "destination": "D1", "function": "sum", "leftColumn": true})).unwrap();
+        for (i, (label, total)) in rows.iter().enumerate() {
+            assert_eq!(v(&s, &format!("D{}", i + 1)), Value::from(*label), "{second}");
+            assert_eq!(n(&s, &format!("E{}", i + 1)), *total, "{second}");
+        }
+        assert_eq!(v(&s, &format!("D{}", rows.len() + 1)), Value::Empty, "{second}");
+    }
+}
+
 #[test]
 fn advanced_filter_refuses_a_list_times_criteria_product_over_the_work_limit() {
     let mut s = s();
