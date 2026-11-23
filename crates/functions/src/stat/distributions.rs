@@ -384,7 +384,9 @@ pub(super) fn t_dist_2t(a: &[Arg], _: C) -> R<Value> {
 pub(super) fn t_dist_rt(a: &[Arg], _: C) -> R<Value> {
     let x = num(a, 0)?;
     let v = df_arg(a, 1)?;
-    num_val(1.0 - t_cdf(x, v))
+    // The right tail directly: as 1 − T.DIST it would lose its digits, down to 0 for a tail below
+    // 1e-16.
+    num_val(if x >= 0.0 { t_upper(x, v) } else { 1.0 - t_upper(-x, v) })
 }
 
 pub(super) fn tdist_legacy(a: &[Arg], _: C) -> R<Value> {
@@ -596,8 +598,9 @@ pub(super) fn f_test(a: &[Arg], _: C) -> R<Value> {
     }
     let f = v1 / v2;
     let (d1, d2) = ((x.len() - 1) as f64, (y.len() - 1) as f64);
-    let c = f_cdf(f, d1, d2);
-    num_val((2.0 * c.min(1.0 - c)).min(1.0))
+    // The smaller tail, each computed directly: 1 − F.DIST would lose a small upper tail's digits.
+    let tail = f_cdf(f, d1, d2).min(f_upper(f, d1, d2));
+    num_val((2.0 * tail).min(1.0))
 }
 
 pub(super) fn binom_dist(a: &[Arg], _: C) -> R<Value> {

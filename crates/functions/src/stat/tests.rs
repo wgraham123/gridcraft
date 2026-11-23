@@ -742,6 +742,30 @@ fn f_distributions_accept_ten_billion_degrees() {
     is_err(ev("F.DIST.RT", vec![n(0.0), n(1.0), n(10_000_000_001.0)]), CellError::Num);
 }
 
+/// A right tail is computed as such, not as 1 minus the left side, so a small one keeps its digits
+/// and one below 1e-16 is not 0. References: 40-digit incomplete beta (mpmath).
+#[test]
+fn right_tails_keep_their_digits() {
+    assert!(rel_err(ev("T.DIST.RT", vec![n(1e6), n(3.0)]), 1.102_657_790_839_614_5e-18) < 1e-13);
+    assert!(rel_err(ev("T.DIST.RT", vec![n(10.0), n(30.0)]), 2.287_625_704_114_806_6e-11) < 1e-13);
+    for (x, v) in [(0.7, 4.0), (3.0, 12.0), (25.0, 2.0)] {
+        let (Value::Number(right), Value::Number(left)) = (ev("T.DIST.RT", vec![n(-x), n(v)]), ev("T.DIST.RT", vec![n(x), n(v)])) else { panic!() };
+        close_tol(Value::Number(right + left), 1.0, 1e-15);
+        assert_eq!(
+            ev("T.DIST.RT", vec![n(x), n(v)]),
+            Value::Number(match ev("T.DIST.2T", vec![n(x), n(v)]) {
+                Value::Number(t) => t / 2.0,
+                other => panic!("{other:?}"),
+            })
+        );
+    }
+    // Variances 1e12 apart: the two-tailed probability is 6e-24, not 0.
+    let wide = c(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+    let narrow = c(&[0.0, 1e-6, 2e-6, 3e-6, 4e-6]);
+    assert!(rel_err(ev("F.TEST", vec![wide.clone(), narrow.clone()]), 5.999_999_999_984e-24) < 1e-12);
+    assert!(rel_err(ev("F.TEST", vec![narrow, wide]), 5.999_999_999_984e-24) < 1e-12);
+}
+
 #[test]
 fn t_dist_zero_degrees_error_depends_on_mode() {
     for df in [0.0, 0.9, -0.1] {
