@@ -124,6 +124,15 @@ const READS_ALL: &[&str] = &[
     "TEXTSPLIT",
 ];
 
+/// Of the [`READS_ALL`] functions, those that turn every delimiter into text and sort and index
+/// the list on each call: about 600 ns a cell, measured, against the budget's ~8 ns unit. Each of
+/// their array cells counts [`DELIMITER_COST`] units, so a lift stays within seconds:
+/// `TEXTAFTER(x, SEQUENCE(10000), 1, SEQUENCE(10000))` took a minute at one unit a cell.
+const DELIMITED: &[&str] = &["TEXTBEFORE", "TEXTAFTER", "TEXTSPLIT"];
+
+/// Budget units one delimiter cell of a [`DELIMITED`] call costs.
+const DELIMITER_COST: usize = 64;
+
 /// Cumulative TVM functions that step through every period from `start_period` (argument 3) to
 /// `end_period` (argument 4) on each call.
 const PERIOD_LOOPS: &[&str] = &["CUMIPMT", "CUMPRINC"];
@@ -148,7 +157,8 @@ fn scan_len(spec: &FnSpec, args: &[Arg]) -> usize {
         Value::Array(arr) => Some(arr.data.len()),
         _ => None,
     });
-    if scans { lens.max().unwrap_or(0) } else { lens.fold(0, usize::saturating_add) }
+    let cells = if scans { lens.max().unwrap_or(0) } else { lens.fold(0, usize::saturating_add) };
+    if DELIMITED.contains(&spec.name) { cells.saturating_mul(DELIMITER_COST) } else { cells }
 }
 
 /// The work of one lifted call that depends on its own (lifted) scalar arguments: the number of
@@ -372,6 +382,11 @@ mod tests {
         is_err(ev("FORECAST.LINEAR", vec![tall(501), tall(500_000), tall(500_000)]), CellError::Num);
         is_err(ev("XNPV", vec![av(Array::filled(501, 1, nv(0.1)).into()), tall(500_000), tall(500_000)]), CellError::Num);
         is_err(ev("TEXTJOIN", vec![t(","), av(Array::filled(501, 1, Value::Bool(true)).into()), tall(1_000_000)]), CellError::Num);
+        // Delimiter lists cost more a cell: 1,000 elements over 10,000 delimiters is past it.
+        is_err(ev("TEXTAFTER", vec![t("abc"), tall(10_000), n(1.0), av(Array::filled(1000, 1, nv(0.0)).into())]), CellError::Num);
+        is_err(ev("TEXTSPLIT", vec![av(Array::filled(1000, 1, Value::text("a,b")).into()), t(","), tall(10_000)]), CellError::Num);
+        let split = ev("TEXTSPLIT", vec![av(col(&[1.0, 2.0])), t(",")]);
+        assert_eq!(rows_of(&split).len(), 2);
         // Within the budget they lift as before.
         let top = ev("LARGE", vec![av(col(&[5.0, 9.0, 7.0])), av(col(&[1.0, 2.0]))]);
         assert_eq!(rows_of(&top), vec![vec![nv(9.0)], vec![nv(7.0)]]);
